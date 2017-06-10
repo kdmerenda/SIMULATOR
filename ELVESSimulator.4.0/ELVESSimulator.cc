@@ -230,12 +230,12 @@ ELVESSimulator::Run(evt::Event& event)
       ostringstream idStr;
       idStr << "eye" << eyeId <<"_run"<< "1" << "_event" <<  fLoop;
       cout << event.GetHeader().GetId() << endl;
-      // event.GetHeader().SetId(idStr.str());
-      // fEvent.GetHeader().SetId(fLoop);
-      // if(!eyeEvent.HasHeader()) eyeEvent.MakeHeader();
-      // EyeHeader& eEvent = eyeEvent.GetHeader();
-      // eEvent.SetRunNumber(1);
-      // eEvent.SetEventNumber(fLoop);
+      event.GetHeader().SetId(idStr.str());
+      fEvent.GetHeader().SetId(fLoop);
+       if(!eyeEvent.HasHeader()) eyeEvent.MakeHeader();
+      EyeHeader& eEvent = eyeEvent.GetHeader();
+      eEvent.SetRunNumber(1);
+      eEvent.SetEventNumber(fLoop);
       //cout << endl<<endl<<endl<< eyeId<<endl<<endl<<fEvent.GetHeader().GetId() << endl;
       
       for (fevt::Eye::TelescopeIterator iTel = eyeEvent.TelescopesBegin(fevt::ComponentSelector::eInDAQ),
@@ -328,19 +328,19 @@ ELVESSimulator::Run(evt::Event& event)
 	  }
 	}
 	
-	const unsigned int nBins = 1000;
-	const double tracebin = 1e-7;
+	// const unsigned int nBins = 1000;
+	// const double tracebin = 1e-7;
 	
 	//	telSim.SetNumberOfPhotonBins(8000);
-	telSim.SetNumberOfPhotonBins(8000);
+	//	telSim.SetNumberOfPhotonBins(8000);
 	//	telSim.SetNumberOfPhotonBins(700);
 	
-	telSim.ClearPhotons();
-	if (!telSim.HasPhotonTrace(FdConstants::eFluorDirect))
-	  telSim.MakePhotonTrace(FdConstants::eFluorDirect,1);
-	if (!telSim.HasRayTracedPhotonTrace())
-	  telSim.MakeRayTracedPhotonTrace(nBins, tracebin);
-	telSim.ClearRayTracedPhotonTrace();	
+	 telSim.ClearPhotons();
+	// if (!telSim.HasPhotonTrace(FdConstants::eFluorDirect))
+	//   telSim.MakePhotonTrace(FdConstants::eFluorDirect,1);
+	// if (!telSim.HasRayTracedPhotonTrace())
+	//   telSim.MakeRayTracedPhotonTrace(nBins, tracebin);
+	// telSim.ClearRayTracedPhotonTrace();	
 	
 
 	//ROOT OUTPUT TO CHECK THE SIGNAL BEFORE THE PHOTON CREATION
@@ -382,11 +382,11 @@ ELVESSimulator::Run(evt::Event& event)
 	//This is the creation of photons
 	for(int iCell=0; iCell<fNPhotonsToCreate;iCell+=fPhotonDiscr){
 	  
-	  //check if we are in the window of interest.	  
+	  //check if we are in the window of interest.
 
-	 if(!(ELVESData[iCell].time >= (fLoop-1)*0.0001 && ELVESData[iCell].time < (fLoop)*0.0001)) continue;
-	  // if(ELVESData[iCell].time > 0.0008) continue;
-	  //	  if(!(ELVESData[iCell].time >= (fLoop-1)*0.00007 && ELVESData[iCell].time < (fLoop)*0.00007)) continue;
+	  if(!(ELVESData[iCell].time >= (fLoop-1)*0.0001 && ELVESData[iCell].time < (fLoop)*0.0001)) continue;
+	  //	 if(fLoop == 1 && !(ELVESData[iCell].time >= 0. && ELVESData[iCell].time < 0.00072)) continue;
+
 	 if (ELVESData[iCell].nphotonsnormalized < 1.0) continue;//is this fair?
 
 	  //	  double photonNumber = ELVESData[iCell].nphotonsnormalized;
@@ -565,7 +565,8 @@ ELVESSimulator::ELVESSimDataCreator(){
   
   //initialize the variables for the input tree. 
   TVector3* position = 0;
-  double radiusVar, phiVar, time, n, thetaVar;
+  //    double radiusVar, phiVar, time, n, thetaVar;
+    float radiusVar, phiVar, time, n, thetaVar;
 
   
   if(fprodversion == 0){

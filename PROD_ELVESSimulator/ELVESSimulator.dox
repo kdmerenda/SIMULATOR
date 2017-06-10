@@ -1,0 +1,16 @@
+namespace ELVESSimulationNS {
+
+/**
+\class ELVESSimulator
+
+\brief Describe your module. In one sentence.
+
+Now here a longer description in doxygen. You may use HTML.
+
+
+\author Kevin-Druis Merenda
+\date 06 Feb 2017
+\version 
+\ingroup fevt
+*/
+}

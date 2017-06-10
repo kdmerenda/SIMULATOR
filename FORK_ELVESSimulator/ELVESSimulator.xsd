@@ -1,0 +1,31 @@
+<!-- -*- XML -*- -->
+<xs:schema xmlns:xs='http://www.w3.org/2001/XMLSchema'
+           xmlns:auger="http://www.auger.org/schema/types">
+<xs:import namespace="http://www.auger.org/schema/types" 
+           schemaLocation="/home/kswiss/Workspace/offline/install/share/auger-offline/config/AugerSchemaTypes.xsd
+"/>
+<!-- 
+Schema for checking ELVESSimulator configuration file.
+-->
+<xs:element name="ELVESSimulator">  
+  <xs:complexType>
+    <xs:all>
+
+      <xs:element name="ELVESInput"                   type="xs:string" />
+      <xs:element name="ELVESTreeName"                type="xs:string" />
+      <xs:element name="ELVESParameterTreeName"       type="xs:string" />
+      <xs:element name="ELVESCenterLatitude"          type="auger:doubleWithUnit" />
+      <xs:element name="ELVESCenterLongitude"         type="auger:doubleWithUnit" />
+      <xs:element name="NumberOfDiaphragmEntryPoints" type="xs:int" />
+      <xs:element name="PhotonDiscretization"         type="xs:int" />
+      <xs:element name="NumberOfTreeEntries"          type="xs:int" />
+      <xs:element name="FrameSelection"               type="xs:int" />
+      <xs:element name="PreCheck"                     type="xs:int" />
+      <xs:element name="GeometricCorrection"          type="xs:int" />
+      <xs:element name="AtmosphericCorrection"        type="xs:int" />
+
+    </xs:all>
+  </xs:complexType>
+    	    
+</xs:element>
+</xs:schema>

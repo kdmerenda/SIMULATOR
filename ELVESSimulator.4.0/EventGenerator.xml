@@ -54,11 +54,11 @@ where configuration files are copied. -->
     </eventTime-->
   <timeInterval>
     <timeOrdered>
-      <nEvents> 4 </nEvents>
+      <nEvents> 10 </nEvents>
       <timeRandomized> 0 </timeRandomized>
     </timeOrdered>
     <startTime> 2017-01-01T04:33:12.5000 </startTime>
-    <endTime> 2017-01-01T04:33:12.5004 </endTime>
+    <endTime> 2017-01-01T04:33:12.5010 </endTime>
   </timeInterval>
 
 </EventGenerator>
