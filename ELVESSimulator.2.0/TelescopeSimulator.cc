@@ -1,0 +1,615 @@
+/**
+   \file
+   Implementation of the TelescopeSimulator module
+
+   \author Ralf Ulrich, FZK
+   \date Tue Feb 28 12:15:36 CET 2006
+
+   based on original code from Luis Prado Jr 01 Apr 2004
+   \version $Id: TelescopeSimulator.cc 30038 2017-03-09 22:45:37Z rulrich $
+*/
+
+static const char CVSId[] =
+  "$Id: TelescopeSimulator.cc 30038 2017-03-09 22:45:37Z rulrich $";
+
+#include <utl/config.h>
+
+#include "TelescopeSimulator.h"
+#include "RayTracer.h"
+
+#include <utl/Reader.h>
+#include <utl/ErrorLogger.h>
+#include <utl/AugerUnits.h>
+#include <utl/MathConstants.h>
+#include <utl/Math.h>
+#include <utl/PhysicalConstants.h>
+#include <utl/PhysicalFunctions.h>
+#include <utl/Point.h>
+#include <utl/TabulatedFunction.h>
+#include <utl/TabulatedFunctionErrors.h>
+#include <utl/Trace.h>
+#include <utl/MultiTabulatedFunction.h>
+#include <utl/Photon.h>
+#include <utl/RandomEngine.h>
+#include <utl/UTMPoint.h>
+
+#include <fwk/CentralConfig.h>
+#include <fwk/CoordinateSystemRegistry.h>
+#include <fwk/RandomEngineRegistry.h>
+#include <fwk/SVNGlobalRevision.h>
+
+#include <det/Detector.h>
+
+#include <fdet/FDetector.h>
+#include <fdet/Eye.h>
+#include <fdet/Telescope.h>
+#include <fdet/Camera.h>
+#include <fdet/Pixel.h>
+#include <fdet/Mirror.h>
+#include <fdet/Filter.h>
+#include <fdet/Corrector.h>
+
+#include <evt/Event.h>
+
+#include <fevt/FEvent.h>
+#include <fevt/Eye.h>
+#include <fevt/TelescopeSimData.h>
+#include <fevt/Telescope.h>
+#include <fevt/PixelSimData.h>
+#include <fevt/Pixel.h>
+
+#include <boost/tuple/tuple.hpp>
+
+#include <TDirectory.h>
+#include <TFile.h>
+#include <TTree.h>
+
+#include <CLHEP/Random/Randomize.h>
+
+#include <iomanip>
+#include <fstream>
+#include <sstream>
+
+using namespace TelescopeSimulatorKG;
+using namespace std;
+using namespace utl;
+using namespace evt;
+using namespace fwk;
+using namespace det;
+using namespace fdet;
+
+using CLHEP::RandFlat;
+
+
+
+TelescopeSimulator::TelescopeSimulator() :
+  fVerbosityLevel(0)
+{
+}
+
+
+VModule::ResultFlag TelescopeSimulator::Init()
+{
+  fDrumMode = false;
+  fSpotMode = false;
+  fSpotPhotonList = 0;
+
+  Branch topB =
+    CentralConfig::GetInstance()->GetTopBranch("TelescopeSimulatorKG");
+
+  fRandomEngine =
+    &RandomEngineRegistry::GetInstance().Get(RandomEngineRegistry::eDetector);
+
+  // ---------------------  **OPTIONAL**  ---------------------
+  fVerbosityLevel = 2;
+  if (topB.GetChild("verbosityLevel"))
+    topB.GetChild("verbosityLevel").GetData(fVerbosityLevel);
+
+  // ---------------------  **OPTIONAL**  ---------------------
+  //
+  // Configure the ray tracing options
+  //
+  fDoNoShadow = false;
+  fDoNoShadowSupport = false;
+  fHasNoMercedes = false;
+  Branch optionsB = topB.GetChild("RayTracingOptions");
+  if (optionsB) {
+    optionsB.GetChild("DoNoShadow").GetData(fDoNoShadow);
+    optionsB.GetChild("DoNoShadowSupport").GetData(fDoNoShadowSupport);
+    optionsB.GetChild("HasNoMercedes").GetData(fHasNoMercedes);
+  }
+
+  topB.GetChild("StoreLightComponentsAtPixels").GetData(fStoreLightComponentsAtPixels);
+
+  // ---------------------  **OPTIONAL**  ---------------------
+  fDrawNumberOfPhotons = 100;//use dto be 0
+  fDraw = false;//set to true to draw
+  Branch drawingB = topB.GetChild("DrawingOptions");
+  if (drawingB) {
+    fDraw = true;
+    drawingB.GetChild("numberOfPhotons").GetData(fDrawNumberOfPhotons);
+  }
+
+  // ---------------------  **OPTIONAL**  ---------------------
+  fShadowDataOutName = "shadow.root";
+  if (topB.GetChild("ShadowDataOut"))
+    topB.GetChild("ShadowDataOut").GetData(fShadowDataOutName);
+
+
+  // ------------------------------------------------
+  //
+  // do some final output
+
+  // info output
+  ostringstream info;
+  info << " Version: " << GetVersionInfo(VModule::eRevisionNumber) << "\n"
+       << " Parameters:\n";
+  if (fDoNoShadow || fDoNoShadowSupport || fHasNoMercedes) {
+    info << "     camera body shadow: " << (!fDoNoShadow ? "yes" : "no") << "\n"
+            "  camera support shadow: " << (!fDoNoShadowSupport ? "yes" : "no") << "\n"
+            "    mercedes collectors: " << (!fHasNoMercedes ? "yes" : "no") << "\n";
+  }
+  info << "  save light components: " << (fStoreLightComponentsAtPixels ? "yes" : "no") << '\n';
+  if (fDraw)
+    info << "      save 3D plot with: " << fDrawNumberOfPhotons << " raytraced photons\n";
+
+  INFO(info);
+
+  // ---------------------------------------------------
+  // the model config signature
+  ostringstream configSS;
+  configSS << "TelescopeSimulatorKG";
+  if (fDoNoShadow || fDoNoShadowSupport || fHasNoMercedes)
+    configSS << "(camera-shadow / support-shadow / mercedes) = ("
+             << (!fDoNoShadow ? "yes" : "no") << " / "
+             << (!fDoNoShadowSupport ? "yes" : "no") << " / "
+             << (!fHasNoMercedes ? "yes" : "no") << ")";
+  fGeneralConfigSignature = configSS.str();
+
+  return eSuccess;
+}
+
+
+VModule::ResultFlag
+TelescopeSimulator::Run(evt::Event& event)
+{
+  if (!event.HasFEvent()) {
+    ERROR("Event has no FEvent.");
+    return eFailure;
+  }
+  fevt::FEvent& fEvent = event.GetFEvent();
+
+  if (!event.HasSimShower() && !fSpotMode) {
+    /*
+      In drum mode (AND SPOT MODE) the handling of photons is different from normal mode.
+      While normaly photons are tracked with a weight, in drum mode photons are tracked
+      as physical objects that can only get absorbed - or not.
+     */
+    fDrumMode = true;
+  }
+
+  const Detector& detector = Detector::GetInstance();
+  const FDetector& detFD = detector.GetFDetector();
+
+  // loop eyes
+  for (fevt::FEvent::EyeIterator iEye = fEvent.EyesBegin(fevt::ComponentSelector::eInDAQ);
+       iEye != fEvent.EyesEnd(fevt::ComponentSelector::eInDAQ); ++iEye) {
+
+    if (iEye->GetStatus() == fevt::ComponentSelector::eDeSelected)
+      continue;
+
+    const unsigned int eyeId = iEye->GetId();
+    fevt::Eye& eyeEvent = *iEye;
+
+    // loop telescopes
+    for (fevt::Eye::TelescopeIterator iTel = eyeEvent.TelescopesBegin(fevt::ComponentSelector::eInDAQ);
+         iTel != eyeEvent.TelescopesEnd(fevt::ComponentSelector::eInDAQ); ++iTel) {
+
+      const unsigned int telId = iTel->GetId();
+      fevt::Telescope& telEvent = *iTel;
+      const fdet::Telescope& detTel = detFD.GetTelescope(telEvent);
+
+      const TabulatedFunction& telMeasEfficiency  = detTel.GetMeasuredRelativeEfficiency();
+
+      if (!telEvent.HasSimData())
+	continue;
+      fevt::TelescopeSimData& telSim = telEvent.GetSimData();
+      telSim.SetConfigSignatureStr(detTel.GetConfigSignatureStr(fGeneralConfigSignature));
+
+      const double normWavelength = detFD.GetReferenceLambda();
+      const TabulatedFunction& mirRef = detTel.GetMirror().GetReflectivity();
+      const TabulatedFunction& filtTrans = detTel.GetFilter().GetTransmittance();
+
+      // corrector
+
+      const fdet::Camera& detCamera = detTel.GetCamera();
+      const unsigned int telTraceNBins = telSim.GetNumberOfPhotonBins();
+      const double telTraceBinWidth = detCamera.GetFADCBinSize();
+
+      const int nPhotons = telSim.GetNPhotons();
+
+      if (!nPhotons)
+        continue;
+
+      ostringstream info;
+      info << "Raytracing eye=" << eyeId
+           << ", telescope=" << telId
+           << ", rDia=" << setw(6) << detTel.GetDiaphragmRadius()
+           << ", nPhotons=" << nPhotons;
+      INFO(info);
+
+      const double minWl = detFD.GetModelMinWavelength();
+      const double maxWl = detFD.GetModelMaxWavelength();
+
+      map<int, int> rayTracerResults; // for verbose info output: [status:counts]
+
+      const double drawPhotonProbablility = (double)fDrawNumberOfPhotons / nPhotons;
+      RayTracer rayTracer(detTel, *fRandomEngine,
+                          !fDoNoShadow, !fDoNoShadowSupport, !fHasNoMercedes,
+                          fDraw, drawPhotonProbablility);
+
+      const int index = telId + eyeId * 100;
+      fNHit[index] = 0;
+      fN_1[index] = 0;
+      fN_2[index] = 0;
+      fN_3[index] = 0;
+      fN_4[index] = 0;
+      fN_5[index] = 0;
+      fN_6[index] = 0;
+      
+      unsigned int countWlBoundary = 0;
+      unsigned int countFilterMirror = 0;
+
+      map<int, TraceD*> traces;
+      for (fevt::TelescopeSimData::PhotonIterator iPhoton = telSim.PhotonsBegin();
+           iPhoton != telSim.PhotonsEnd(); ++iPhoton) {
+
+	// RUDEBUG
+	/*
+	if (iPhoton->GetSource() == fevt::FdConstants::eCherDirect) {
+	  static int ___n_dc = 0;
+	  ostringstream __inf;
+	  __inf << "direct-chernkov: " << ___n_dc++;
+	  INFO(__inf);
+	  TelescopeSimulatorKG::RayTracer::SetDebugLevel(10);
+	  fVerbosityLevel = 100;
+	} else {
+	  TelescopeSimulatorKG::RayTracer::SetDebugLevel(0);
+	  fVerbosityLevel = 0;
+	  }*/
+	
+        const double wavelength = iPhoton->GetWavelength();
+        const double inputWeight = iPhoton->GetWeight();
+	
+	// cout << "wl=" << wavelength/nanometer << " w=" << inputWeight << " t=" << iPhoton->GetTime() << endl;
+	
+        if (wavelength < minWl || wavelength > maxWl) {
+          ++countWlBoundary;
+          continue;
+        }
+	
+        const double filterMirFactor = mirRef.Y(wavelength) * filtTrans.Y(wavelength);
+	
+        if (fDrumMode) {
+          if (RandFlat::shoot(&fRandomEngine->GetEngine(), 0., 1.) > filterMirFactor) {
+            countFilterMirror++;
+            continue; // photon absorbed
+          }
+        }
+	
+        utl::Photon photonOut;
+        int col = 0;
+        int row = 0;
+	
+        int nreflections = 0;
+        const RTResult status = rayTracer.Trace(*iPhoton, photonOut, nreflections, col, row);
+        const double weight = photonOut.GetWeight();
+	
+	// cout << " st=" << (status==eOK) << " " << weight << endl;
+	
+        if (status != eOK ) { // photon lost
+          rayTracerResults[status]++;
+          continue;
+        } else {
+          if (status == eOK && weight==0) {
+            rayTracerResults[eAbsorbed]++;
+            continue;
+          }
+        }
+	
+        if (fSpotMode) {
+          fSpotPhotonList->push_back(std::make_pair(photonOut, (int)status));
+        }
+	
+        if (fDrumMode) {
+          if (RandFlat::shoot(&fRandomEngine->GetEngine(), 0., 1.) > weight/iPhoton->GetWeight()) {
+            rayTracerResults[eAbsorbed]++;
+            continue; // photon absorbed
+          }
+        }
+	
+        rayTracerResults[status]++;
+	
+        const unsigned int pxlId = (col-1)*detTel.GetLastRow() + row;
+        const fdet::Pixel& detPix = detTel.GetPixel(pxlId);
+        const TabulatedFunction& qEff = detPix.GetQEfficiency();
+	
+        // !! this factor is to achive consistency to reconstruction !!
+	// the model wavelength dependence is tweaked to the data 
+	double efficiencyWavelengthCorrection = 0;
+        if (!fDrumMode) {
+          const double modelRelEff = detTel.GetModelRelativeEfficiency(wavelength);
+          if (modelRelEff)
+            efficiencyWavelengthCorrection = telMeasEfficiency.Y(wavelength) / modelRelEff;
+        }
+	
+        const double time = photonOut.GetTime().GetInterval();
+        const int bin = int(time/telTraceBinWidth);
+	
+	if (fVerbosityLevel > 2) {
+	  ostringstream dbg;
+          dbg << " bin=" << setw(4) << bin
+	      << " time=" << setw(6) << time/ns
+	      << " weight=" << setw(4) << weight
+	      << " wl=" << setw(4) << wavelength/nanometer
+	      << " col=" << setw(3) << col
+	      << " row=" << setw(3) << row
+	      << " pixelId=" << setw(3) << pxlId
+	      << " telTraceBinWidth=" << setw(3) << telTraceBinWidth
+	      << " telTraceNBins=" << setw(5) << telTraceNBins
+	      << " EQ=" << qEff.Y(wavelength)/qEff.Y(normWavelength)
+	      << " EC=" << efficiencyWavelengthCorrection;
+	  INFO(dbg);
+	}
+	
+        if (bin < 0 || bin >= int(telTraceNBins)) {
+          if (fVerbosityLevel > 2) {
+            ostringstream err;
+            err << "Bin out of range. bin=" << bin
+                << " weight=" << weight;
+            ERROR(err);
+          }
+          continue;
+        }
+	
+        // In drum mode there is no weight. Photons can only get absorbed (or not).
+	// at _reference_ wavelengths
+	const double QEffCorrection = qEff.Y(wavelength) / qEff.Y(normWavelength);	  
+        const double photonWeight =
+          (fDrumMode ? 1 : (weight * filterMirFactor * QEffCorrection * efficiencyWavelengthCorrection)); 
+	
+        switch (nreflections) {
+        case 0: fNHit[index] += photonWeight; break; // direct hit
+        case 1: fN_1[index] += photonWeight; break;
+        case 2: fN_2[index] += photonWeight; break;
+        case 3: fN_3[index] += photonWeight; break;
+        case 4: fN_4[index] += photonWeight; break;
+        case 5: fN_5[index] += photonWeight; break;
+        case 6: fN_6[index] += photonWeight; break;
+        }
+	
+        // create pixels trace if not there yet
+        if (!traces.count(pxlId)) {
+          if (!telEvent.HasPixel(pxlId))
+            telEvent.MakePixel(pxlId);
+          fevt::Pixel& pixData = telEvent.GetPixel(pxlId);
+          if (!pixData.HasSimData())
+            pixData.MakeSimData();
+          fevt::PixelSimData& pixSimData = pixData.GetSimData();
+          if (!pixSimData.HasPhotonTrace(fevt::FdConstants::eTotal))
+            pixSimData.MakePhotonTrace(telTraceNBins, telTraceBinWidth, fevt::FdConstants::eTotal);
+          traces[pxlId] = &(pixSimData.GetPhotonTrace(fevt::FdConstants::eTotal));
+        }
+	
+        // add to pixel's trace
+        (*(traces[pxlId]))[bin] += photonWeight;
+	
+        if (fStoreLightComponentsAtPixels) {
+	  
+	  /*
+	    This option is only for VISUAL inspect of the simulations.
+	    
+	    The idea is to compare the simulated light components of
+	    the photon traces at each pixel to the corresponding
+	    reconstructed photon trace. In reco, this is is units of
+	    "ADC * caliconst", thus photons at the diaphragm. 
+	    
+	    Thus, it is best to apply all optical, raytracing and
+	    electronics effects to the photon signal and finally
+	    divide by the "MC drum calibration factors" to get back to
+	    units of "photons at the diaphragm". 
+
+	    DIFFERENT APPROACH: 
+
+	    Just save the "input weight" of the photons at the
+	    diaphragm, if they hit a PMT.
+	  */
+
+	  // consider the wavelength dependence 
+	  const double photonInputWeight = inputWeight * QEffCorrection * efficiencyWavelengthCorrection;
+	  
+	  /*
+	  fevt::Pixel& pix = tel.GetPixel(pixelId);
+	  const fdet::Pixel& detPixel = detFD.GetPixel(pix);
+	  const fdet::Channel& detChannel = detFD.GetChannel(pix); // mapped channel
+	  const TabulatedFunction& qEff = detPixel.GetQEfficiency();
+	  const double absGain = detChannel.GetElectronicsGain();
+	  
+	  const string& configSignature = tel.GetSimData().GetConfigSignature();
+	  const double calibCorrection = fThresholdMode ? 1.0 : detPixel.GetSimulatedEndToEndCalibration(configSignature) / caliconst;
+	  */	 
+	  
+          const fevt::FdConstants::LightSource lightSource =
+            (fevt::FdConstants::LightSource)iPhoton->GetSource();
+          fevt::PixelSimData& pixSimData = telEvent.GetPixel(pxlId).GetSimData();
+          if (!pixSimData.HasPhotonTrace(lightSource))
+            pixSimData.MakePhotonTrace(telTraceNBins, telTraceBinWidth, lightSource);
+          pixSimData.GetPhotonTrace(lightSource)[bin] += photonInputWeight;
+          if (!pixSimData.HasPhotonWeightSquareTrace(lightSource))
+            pixSimData.MakePhotonWeightSquareTrace(telTraceNBins, telTraceBinWidth, lightSource);
+          pixSimData.GetPhotonWeightSquareTrace(lightSource)[bin] += photonInputWeight*photonInputWeight;
+        }
+	
+      } // loop Photons
+      
+      if (fVerbosityLevel > 0) {
+        int debugTotal = 0;
+	ostringstream info;
+	info << "\n";
+        for(map<int, int>::const_iterator iRTR = rayTracerResults.begin();
+	    iRTR != rayTracerResults.end(); ++iRTR) {
+	  info << " RayTraceResult \"" << RTResultName[iRTR->first] << "\" occured " << iRTR->second << " times " << endl;
+	  debugTotal += iRTR->second;
+        }
+        info << " RayTraceResult \"total\" number of photons is " << debugTotal << endl;
+        info << " RayTraceResult wl-boundaries: " << countWlBoundary << endl;
+        info << " RayTraceResult filt-mirror: " << countFilterMirror << endl;
+        info << " RayTraceResult grand-total: " << debugTotal + countFilterMirror + countWlBoundary;
+	INFO(info);
+      }
+      
+
+      if (fVerbosityLevel > 2) {	
+        // Output pixels with signal
+        for (map<int,TraceD*>::iterator iTrace = traces.begin();
+             iTrace != traces.end(); ++iTrace) {
+          const int pxlId = iTrace->first;
+          const int col = (pxlId - 1) / detTel.GetLastRow() + 1; // (col-1)*lastRow + row;
+          const int row = (pxlId - 1) % detTel.GetLastRow() + 1;
+
+	  ostringstream info;
+          info << "eyeId=" << eyeId << " telId=" << telId << " pixelId=" << pxlId
+               << " col=" << col << " row=" << row
+               << " trace:";
+
+          double signal = 0;
+          for (unsigned int i = 0; i < telTraceNBins; ++i) {
+            if (fVerbosityLevel > 3) {
+              if ((*(iTrace->second))[i])
+                info << " i: " << i
+                     << " val: " << (*(iTrace->second))[i]
+                     << " |";
+            }
+            signal += (*(iTrace->second))[i];
+          }
+          info << " total signal " << signal;
+	  INFO(info);
+        }
+      } // end verbose
+
+    } // End loop over Telescopes
+
+  } // End loop over Eyes
+
+  return eSuccess;
+} // end of Run
+
+
+VModule::ResultFlag
+TelescopeSimulator::Finish()
+{
+  // -- shadow factor calculation --
+  if (fDrumMode) {
+
+    TDirectory* save = gDirectory;
+    TFile output(fShadowDataOutName.c_str(), "UPDATE");
+    for (map<int, unsigned int>::const_iterator iter = fNHit.begin();
+         iter != fNHit.end(); ++iter)
+      {
+        const int index = iter->first;
+        ostringstream name;
+        name << "shadow_" << index;
+        TTree* tree = (TTree*) output.Get(name.str().c_str());
+        if (!tree) {
+          tree = new TTree(name.str().c_str(), "shadow info");
+          tree->Branch("direct", &fNHit[index], "direct/i");
+          tree->Branch("refl1", &fN_1[index], "refl1/i");
+          tree->Branch("refl2", &fN_2[index], "refl2/i");
+          tree->Branch("refl3", &fN_3[index], "refl3/i");
+          tree->Branch("refl4", &fN_4[index], "refl4/i");
+          tree->Branch("refl5", &fN_5[index], "refl5/i");
+          tree->Branch("refl6", &fN_6[index], "refl6/i");
+        } else {
+          tree->SetBranchAddress("direct", &fNHit[index]);
+          tree->SetBranchAddress("refl1", &fN_1[index]);
+          tree->SetBranchAddress("refl2", &fN_2[index]);
+          tree->SetBranchAddress("refl3", &fN_3[index]);
+          tree->SetBranchAddress("refl4", &fN_4[index]);
+          tree->SetBranchAddress("refl5", &fN_5[index]);
+          tree->SetBranchAddress("refl6", &fN_6[index]);
+        }
+        tree->Fill();
+        tree->Write();
+
+        ostringstream info;
+        info << "\n\n ------------- SHADOW INFO (telId=" << index << ") -----------" << "\n"
+             << " Direct hit of focal surface: " << fNHit[index] << "\n"
+             << " 1 mercedes refl.           : " << fN_1[index] << "\n"
+             << " 2 mercedes refl.           : " << fN_2[index] << "\n"
+             << " 3 mercedes refl.           : " << fN_3[index] << "\n"
+             << " 4 mercedes refl.           : " << fN_4[index] << "\n"
+             << " 5 mercedes refl.           : " << fN_5[index] << "\n"
+             << " 6 mercedes refl.           : " << fN_6[index] << "\n";
+
+        const double nTot = ((double)fN_1[index] +
+                             (double)fN_2[index] +
+                             (double)fN_3[index] +
+                             (double)fN_4[index] +
+                             (double)fN_5[index] +
+                             (double)fN_6[index]);
+        const double nMercedes = ((double)fN_1[index] * 1. +
+                                  (double)fN_2[index] * 2. +
+                                  (double)fN_3[index] * 3. +
+                                  (double)fN_4[index] * 4. +
+                                  (double)fN_5[index] * 5. +
+                                  (double)fN_6[index] * 6.);
+        const double meanRefls = (double(nMercedes) / (fNHit[index] + nTot));
+        info << " Mean number of reflections from mercedes: " << meanRefls << " at tel=" << index << "\n";
+        info << " -----------------------------------------------------------------";
+        INFO(info);
+      }
+    output.Close();
+    gDirectory = save;
+  }
+
+  return eSuccess;
+}
+
+
+void
+TelescopeSimulator::SetSpotPhotonList(PhotonList& phList)
+{
+  fSpotPhotonList = &phList;
+  fSpotMode = true;
+}
+
+
+// --------------------------
+// Wed Jul 26 10:51:33 CEST 2006
+// this is for SG spot tables !!!!!!!!!
+void
+TelescopeSimulator::TransformToLocalCameraCoordinates(const double laz, const double lze, double& caz, double& cze)
+{
+  const double phi0 = 16.*kPi/180.;
+
+  const double llaz = lze + 0.5*kPi;
+  const double llze = laz + 0.5*kPi;
+
+  const double xx = sin(llaz) * cos(llze);
+  const double yy = sin(llaz) * sin(llze);
+  const double zz = cos(llaz);
+
+  const double x = xx;
+  const double y = yy * cos(phi0) - zz * sin(phi0);
+  const double z = yy * sin(phi0) + zz * cos(phi0);
+
+  caz = asin(x);
+  cze = phi0 - atan(z/y);
+}
+
+
+// Configure (x)emacs for this file ...
+// Local Variables:
+// mode: c++
+// compile-command: "cd $AUGER_BASE && make"
+// End:

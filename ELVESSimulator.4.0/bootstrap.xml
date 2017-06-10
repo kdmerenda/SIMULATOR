@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+
+<!DOCTYPE bootstrap [
+  <!ENTITY standardFdIdealDetConfig SYSTEM '/home/kswiss/Workspace/offline/install/share/auger-offline/config/standardFdIdealDetConfig.xml'>
+  <!ENTITY standardFdSimModuleConfig SYSTEM '/home/kswiss/Workspace/offline/install/share/auger-offline/config/standardFdSimModuleConfig.xml'>
+]>
+
+<bootstrap xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:noNamespaceSchemaLocation='/home/kswiss/Workspace/offline/install/share/auger-offline/config/bootstrap.xsd'
+           xmlns:xlink="http://www.auger.org/schema/types">
+
+  &standardFdIdealDetConfig;
+  &standardFdSimModuleConfig;
+
+  <centralConfig>
+
+    <configLink
+      id         = "ModuleSequence"
+      type       = "XML"
+      xlink:href = "./ModuleSequence.xml"/>
+
+    <configLink
+      id         = "EventGenerator"
+      type       = "XML"
+      xlink:href = "./EventGenerator.xml"/>
+
+    <configLink
+      id         = "ELVESSimulator"
+      type       = "XML"
+      xlink:href = "./ELVESSimulator.xml"/>
+
+
+   <configLink                                                                                                    
+      id         = "EventFileExporter"                        
+      type       = "XML"                                                                                          
+      xlink:href = "./EventFileExporter.xml"/>  
+
+   <configLink                                                                                                    
+      id         = "TelescopeSimulator"                        
+      type       = "XML"                                                                                          
+      xlink:href = "./TelescopeSimulatorKG.xml"/>  
+  </centralConfig>
+
+</bootstrap>

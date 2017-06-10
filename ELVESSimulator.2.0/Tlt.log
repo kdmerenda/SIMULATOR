@@ -1,0 +1,21 @@
+========== PrototypeTltProcessor: Results evt.by evt. ==========
+	KEEP  - event accepted by Tlt1/2
+	NP    - number of pattern found in this evt.
+	Unl   - no EventLabel assigned
+	LP    - not enough matching pulses (SLT-FLT)
+	Mult  - >=1 multi-pattern detected
+	Rand  - random time order detected
+	NPro  - time-space order is not proportional
+	BigE  - number of triggered pixel > cut
+	ShoC  - pattern is shower candidate (CP1/2)
+	Size  - number of triggered pixels
+	CP1   - result of cut parameter1 evaluation
+	CP2   - result of cut parameter2 evaluation
+................................................................
+Tlt - KEEP  NP  Unl  LP  Mult Rand NPro BigE ShoC Size  CP1  CP2  CP2err
+Tlt1:   0    0    0    0    0    0    0    1    0  126 0.00 0.00 0.00
+ Rej:   0    0    0    0    0    0    0    1    0  126 0.00 0.00 0.00
+Tlt1:   0    0    0    0    0    0    0    1    0  157 0.00 0.00 0.00
+ Rej:   0    0    0    0    0    0    0    1    0  157 0.00 0.00 0.00
+Tlt1:   0    0    0    0    0    0    0    1    0  184 0.00 0.00 0.00
+ Rej:   0    0    0    0    0    0    0    1    0  184 0.00 0.00 0.00

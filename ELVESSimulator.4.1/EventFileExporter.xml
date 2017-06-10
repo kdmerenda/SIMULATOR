@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+
+<!-- Configuration of Module EventFileExporter -->
+
+<EventFileExporter xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation='/home/kswiss/Workspace/offline/install/share/auger-offline/config/EventFileExporter.xsd'>
+
+<!-- file type :  Offline
+                  FDAS
+                  CDAS
+                  IoAuger
+-->
+
+<OutputFileType> FDAS </OutputFileType>
+
+<!-- the list of filenames (space delimited) -->
+
+<OutputFilename> outputs/FdSimOut.Test.root </OutputFilename>
+
+<!-- Switches to turn on or off streaming to root file for selected parts of the event -->
+<StreamerSwitches>
+   <FDRaw>                on  </FDRaw>
+   <FDSimTraces>          on  </FDSimTraces>
+   <FDSimTelescope>       off </FDSimTelescope>
+   <SDSimPEHisto>         off </SDSimPEHisto>         <!-- photoelectron time distributions at PMT photocathode -->
+   <SDSimPMTBaseHisto>    off </SDSimPMTBaseHisto>    <!-- simulated signal at PMT base -->
+   <SDSimPMTFilterHisto>  off </SDSimPMTFilterHisto>  <!-- simulated signal after PMT filter -->    
+   <SDSimTankParticles>   off </SDSimTankParticles>   <!-- particles injected in a simulated tank -->
+</StreamerSwitches>
+
+
+</EventFileExporter>
+
+
