@@ -3,7 +3,7 @@
 clear
 
 #location of offline xml path to be changed
-offlinePath=/home/kswiss/Workspace/workoffline/simulator/ELVESSimulator.4.1
+offlinePath=/home/kswiss/Workspace/workoffline/simulator/PROD_ELVESSimulator
 
 elvesSimulatorXML="$offlinePath/ELVESSimulator.xml"
 eventFileExporterXML="$offlinePath/EventFileExporter.xml"
