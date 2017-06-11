@@ -232,10 +232,10 @@ ELVESSimulator::Run(evt::Event& event)
       cout << event.GetHeader().GetId() << endl;
       event.GetHeader().SetId(idStr.str());
       fEvent.GetHeader().SetId(fLoop);
-       if(!eyeEvent.HasHeader()) eyeEvent.MakeHeader();
-      EyeHeader& eEvent = eyeEvent.GetHeader();
-      eEvent.SetRunNumber(1);
-      eEvent.SetEventNumber(fLoop);
+      //  if(!eyeEvent.HasHeader()) eyeEvent.MakeHeader();
+      // EyeHeader& eEvent = eyeEvent.GetHeader();
+      // eEvent.SetRunNumber(1);
+      // eEvent.SetEventNumber(fLoop);
       //cout << endl<<endl<<endl<< eyeId<<endl<<endl<<fEvent.GetHeader().GetId() << endl;
       
       for (fevt::Eye::TelescopeIterator iTel = eyeEvent.TelescopesBegin(fevt::ComponentSelector::eInDAQ),
