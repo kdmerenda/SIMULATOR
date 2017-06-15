@@ -49,12 +49,8 @@ SAMPLESHOWERS:=$(shell $(AUGEROFFLINECONFIG) --config)/../doc/SampleShowers
 
 all: $(EXE) $(USER_XMLS)
 
-
 $(EXE): $(OBJS)
-	$(CXX) -o $@ $^ $(MAIN) $(CXXFLAGS) $(LDFLAGS)  -fopenmp -lMinuit
-
-openmp: $(USER_XMLS) $(OBJS)
-	$(CXX) -o elvesmp -Wno-unknown-pragmas -fopenmp  $(OBJS) $(MAIN) $(CXXFLAGS) $(LDFLAGS)
+	$(CXX) -o $@ $^ $(MAIN) $(CXXFLAGS) $(LDFLAGS) 
 
 %: %.in
 	@echo -n "Generating $@ file..." 

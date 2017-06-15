@@ -671,7 +671,7 @@ FdTriggerSimulator::ShiftEventToSLT(fevt::Telescope& tel, int timeT2_1000)
   //changes here too
   int SLTbin;
   if (pageCounter == 1) {
-    SLTbin = 280;
+    SLTbin = 300;
   }else{
     SLTbin = 0;
    }
@@ -1919,12 +1919,11 @@ FdTriggerSimulator::MakeMirrorEvent(fevt::Telescope& tel,
   //const int SLTbin = detCamera.GetSLTTriggerBin();
   int SLTbin;
   if (pageCounter == 1) {
-    SLTbin = 280;
+    SLTbin = 300;
   }else{
     SLTbin = 0;
    }
 
-  if(pageCounte)
   const double binsize = detCamera.GetFADCBinSize();
   const unsigned int tracelength = detCamera.GetFADCTraceLength();
 

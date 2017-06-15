@@ -15,7 +15,7 @@
 
 <!-- the list of filenames (space delimited) -->
 
-<OutputFilename> outputs/FdSimOut.Test.root </OutputFilename>
+<OutputFilename> outputs/FdSimOut.tauf160us.-65.5.root </OutputFilename>
 
 <!-- Switches to turn on or off streaming to root file for selected parts of the event -->
 <StreamerSwitches>

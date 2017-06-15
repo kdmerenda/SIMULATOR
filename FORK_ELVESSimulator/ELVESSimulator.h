@@ -174,6 +174,7 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
   int fdogeomcorr;
   int fdoatmocorr;
   int fdoprecheck;
+  int fprodversion;
   double fNPhotonsMIN;
   double fNPhotonsMAX;
   double fNPhotonsMINEye1;

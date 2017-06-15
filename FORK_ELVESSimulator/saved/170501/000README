@@ -1,0 +1,2 @@
+This is the first time we have changing run number, though the problem of timimng for the traces is still there. However, the peaks are well distinct and the weights are working. THough the time bin is causing problems, some data is lost in the first 28us of pedestals.
+

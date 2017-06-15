@@ -3,10 +3,10 @@
 clear
 
 #location of simulated files
-directoryPath=/media/kswiss/ExtraDrive1/ELVESSimulationData/Auger3D_7km_1000m_2000pt_500ns_SIBC_0.5c_MTLE
+directoryPath=/media/kswiss/ExtraDrive1/ELVESSimulationData/Auger_7km_r1000_pt1000_MTLE_0.7c_1.15e05
 
 #location of offline xml path to be changed
-offlinePath=/home/kswiss/Workspace/workoffline/FORK_ELVESSimulation
+offlinePath=/home/kswiss/Workspace/workoffline/ELVESSimulator.4.0
 
 elvesSimulatorXML="$offlinePath/ELVESSimulator.xml"
 eventFileExporterXML="$offlinePath/EventFileExporter.xml"
@@ -17,7 +17,7 @@ echo "     $eventFileExporterXML"
 
 fileList="$offlinePath/fileList"
 [ -e "$fileList" ] && rm "$fileList"
-find "$directoryPath"/ -name I0_1.15* | sed "s|$directoryPath/||" >> "$fileList" 
+find "$directoryPath"/ -name taur_* | sed "s|$directoryPath/||" >> "$fileList" 
 #ls "$directoryPath/I0_8*/" >> "$fileList"
 
 #getting the amount of files to be raytraced

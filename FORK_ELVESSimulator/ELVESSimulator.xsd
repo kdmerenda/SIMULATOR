@@ -21,6 +21,7 @@ Schema for checking ELVESSimulator configuration file.
       <xs:element name="NumberOfTreeEntries"          type="xs:int" />
       <xs:element name="FrameSelection"               type="xs:int" />
       <xs:element name="PreCheck"                     type="xs:int" />
+      <xs:element name="ProdVersion"                     type="xs:int" />
       <xs:element name="GeometricCorrection"          type="xs:int" />
       <xs:element name="AtmosphericCorrection"        type="xs:int" />
 

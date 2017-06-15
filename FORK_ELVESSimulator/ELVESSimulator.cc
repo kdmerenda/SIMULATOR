@@ -1,5 +1,5 @@
 #include "ELVESSimulator.h"
-#include <omp.h>
+//#include "mpi.h"
 #include <evt/Event.h>
 #include <fevt/FEvent.h>
 #include <fevt/Eye.h>
@@ -82,7 +82,6 @@ ELVESSimulator::~ELVESSimulator()
 VModule::ResultFlag 
 ELVESSimulator::Init()
 {
-  
   INFO("ELVESSimulator::Init()");
 
   CentralConfig* cc = CentralConfig::GetInstance();
@@ -109,6 +108,7 @@ ELVESSimulator::Init()
   topB.GetChild("NumberOfTreeEntries").GetData(fNumTreeEntries);
   topB.GetChild("FrameSelection").GetData(fLoopSelect);
   topB.GetChild("PreCheck").GetData(fdoprecheck);
+  topB.GetChild("ProdVersion").GetData(fprodversion);
   topB.GetChild("GeometricCorrection").GetData(fdogeomcorr);
   topB.GetChild("AtmosphericCorrection").GetData(fdoatmocorr);
 
@@ -135,6 +135,7 @@ ELVESSimulator::Init()
           "    Number of Tree Entries: " << fNumTreeEntries << "\n"
           "            Frame Selected: " << fLoopSelect << "\n"
           "               Do PreCheck: " << fdoprecheck << "\n"
+          "        Production Version: " << fprodversion << "\n"
           " Do Atmospheric Correction: " << fdoatmocorr << "\n"
           "   Do Geometric Correction: " << fdogeomcorr << "\n"
           "           Latitude Center: " << fELVESCenterLat/deg << "\n"
@@ -159,17 +160,18 @@ ELVESSimulator::Run(evt::Event& event)
     INFO("Preparing ELVES Simulated Data...");
     ELVESSimDataCreator();
     fIn->Close();
+  }
+  
+  if(fStatus == eGeneratePhotons){
     Detector& detector = Detector::GetInstance();
     const FDetector& detFD = detector.GetFDetector();
     
-    // if (event.HasFEvent())
-    //   delete &event.GetFEvent();
     if (!event.HasFEvent())
       event.MakeFEvent();
-
     if (!event.HasSimShower())
       event.MakeSimShower();
-      
+    
+    
     fevt::FEvent& fEvent = event.GetFEvent();
     
     INFO("Creating FEvent");
@@ -183,23 +185,25 @@ ELVESSimulator::Run(evt::Event& event)
     for (FDetector::EyeIterator iEye = detFD.EyesBegin();
 	 iEye != detFD.EyesEnd() ; ++iEye) {
       const unsigned int eyeId = iEye->GetId();
-      
-      fEvent.MakeEye(eyeId, fevt::ComponentSelector::eInDAQ);
+
+      if(!fEvent.HasEye(eyeId))
+	fEvent.MakeEye(eyeId, fevt::ComponentSelector::eInDAQ);
       fevt::Eye& eyeEvent = fEvent.GetEye(eyeId, fevt::ComponentSelector::eInDAQ);
       
       
       for (fdet::Eye::TelescopeIterator iTel = iEye->TelescopesBegin();
 	   iTel != iEye->TelescopesEnd(); ++iTel) {
 	const unsigned int telId = iTel->GetId();
-	
-	eyeEvent.MakeTelescope(telId, fevt::ComponentSelector::eInDAQ);
+	if(!eyeEvent.HasTelescope(telId))
+	  eyeEvent.MakeTelescope(telId, fevt::ComponentSelector::eInDAQ);
 	fevt::Telescope& telEvent = eyeEvent.GetTelescope(telId, fevt::ComponentSelector::eInDAQ);
-	
-	telEvent.MakeSimData();
+
+	if(!telEvent.HasSimData())
+	  telEvent.MakeSimData();
 	fevt::TelescopeSimData& telSim = telEvent.GetSimData();
 	
-	telSim.SetPhotonsStartTime(fSimTime);
-	telSim.SetNumberOfPhotonBins(3000);
+	//	telSim.SetPhotonsStartTime(fSimTime);
+       	telSim.SetNumberOfPhotonBins(1000);
 	
       }
     }  
@@ -225,8 +229,14 @@ ELVESSimulator::Run(evt::Event& event)
       if(eyeId > 4)continue;
       ostringstream idStr;
       idStr << "eye" << eyeId <<"_run"<< "1" << "_event" <<  fLoop;
+      cout << event.GetHeader().GetId() << endl;
       event.GetHeader().SetId(idStr.str());
       fEvent.GetHeader().SetId(fLoop);
+      //  if(!eyeEvent.HasHeader()) eyeEvent.MakeHeader();
+      // EyeHeader& eEvent = eyeEvent.GetHeader();
+      // eEvent.SetRunNumber(1);
+      // eEvent.SetEventNumber(fLoop);
+      //cout << endl<<endl<<endl<< eyeId<<endl<<endl<<fEvent.GetHeader().GetId() << endl;
       
       for (fevt::Eye::TelescopeIterator iTel = eyeEvent.TelescopesBegin(fevt::ComponentSelector::eInDAQ),
 	     end = eyeEvent.TelescopesEnd(fevt::ComponentSelector::eInDAQ);
@@ -236,13 +246,19 @@ ELVESSimulator::Run(evt::Event& event)
 	
 	fevt::Telescope& telEvent = *iTel;
        	telEvent.SetTracesStartTime(fSimTime+TimeInterval((fLoop-1)*100000));
+	//	telEvent.SetTracesStartTime(TimeStamp(0));
 	const fdet::Telescope& detTel = detFD.GetTelescope(telEvent);
 	
 	const double rDia = detTel.GetDiaphragmRadius();
+	//	const double diaphragmArea = detTel.GetDiaphragmArea();
 
 	fevt::TelescopeSimData& telSim = telEvent.GetSimData();
+	telSim.SetPhotonsStartTime(fSimTime+TimeInterval((fLoop-1)*100000)); 
 
+	//	fevt::TelescopeSimData& telSim = telEvent.GetSimData();
+	//	const double binWidth = detTel.GetCamera().GetFADCBinSize();
 	const double normWavelength = detFD.GetReferenceLambda();
+	//	const double fRDiaMin = rDia/10. ;//minimum radius on diaphragm, lets say a tenth of the radius
 	const CoordinateSystemPtr& telCS = detTel.GetTelescopeCoordinateSystem();
 	double detFOV = detTel.GetCamera().GetFieldOfView()/deg;//~23 deg
 	detFOV += 10;//add 10 degrees to FOV so that more telescopes will be triggered. 
@@ -259,7 +275,7 @@ ELVESSimulator::Run(evt::Event& event)
 	if (elvesPhi > telFOVLow && elvesPhi < telFOVHigh) {
 	  
 	  //quick cut to only do 1 telescope
-	  if (telId != 3) continue;
+	  //	  if (telId != 1) continue;
 	  
 	  info << "Eye: " <<  eyeId << " Tel: " << telId << endl;
 	  info << "Tel Axis wrt refCS (Az,El): " << telAxis.GetPhi(referenceCS)/deg << " "  <<   90.-telAxis.GetTheta(referenceCS)/deg <<  endl;
@@ -276,10 +292,12 @@ ELVESSimulator::Run(evt::Event& event)
 	
 
       //sort data for the given eye. and set the timing to be used below to the one of the right eye. Maybe try to find a faster way to do this. 
+	int normFactor = 4000;
 	if (eyeId == 1){
 	  sort(ELVESData.begin(), ELVESData.end(), by_timeEye1());
           for (int iTime = 0; iTime < fNPhotonsToCreate; iTime ++){
 	    ELVESData[iTime].time = ELVESData[iTime].timeEye1;
+	    //ELVESData[iTime].nphotonsnormalized = normFactor*(ELVESData[iTime].nphotonsEye1 - fNPhotonsMINEye1)/(fNPhotonsMAXEye1-fNPhotonsMINEye1);    
 	    ELVESData[iTime].nphotonsnormalized = ELVESData[iTime].nphotonsEye1 ;    
 	  }
 	}
@@ -287,6 +305,7 @@ ELVESSimulator::Run(evt::Event& event)
 	  sort(ELVESData.begin(), ELVESData.end(), by_timeEye2());
 	  for (int iTime = 0; iTime < fNPhotonsToCreate; iTime ++){
 	    ELVESData[iTime].time = ELVESData[iTime].timeEye2;
+	    //ELVESData[iTime].nphotonsnormalized = normFactor*(ELVESData[iTime].nphotonsEye2 - fNPhotonsMINEye2)/(fNPhotonsMAXEye2-fNPhotonsMINEye2);
 	    ELVESData[iTime].nphotonsnormalized = ELVESData[iTime].nphotonsEye2 ;    
 
 	  }
@@ -296,34 +315,85 @@ ELVESSimulator::Run(evt::Event& event)
 	  for (int iTime = 0; iTime < fNPhotonsToCreate; iTime ++) {
 	    ELVESData[iTime].time = ELVESData[iTime].timeEye3;
 	    ELVESData[iTime].nphotonsnormalized = ELVESData[iTime].nphotonsEye3 ;    
+	    //ELVESData[iTime].nphotonsnormalized = normFactor*(ELVESData[iTime].nphotonsEye3 - fNPhotonsMINEye3)/(fNPhotonsMAXEye3-fNPhotonsMINEye3);    
 	  }
 	}
 	if (eyeId == 4){
 	  sort(ELVESData.begin(), ELVESData.end(), by_timeEye4());
 	  for (int iTime = 0; iTime < fNPhotonsToCreate; iTime ++){
 	    ELVESData[iTime].time = ELVESData[iTime].timeEye4;
+	    //ELVESData[iTime].nphotonsnormalized = normFactor*(ELVESData[iTime].nphotonsEye4 - fNPhotonsMINEye4)/(fNPhotonsMAXEye4-fNPhotonsMINEye4);
 	    ELVESData[iTime].nphotonsnormalized = ELVESData[iTime].nphotonsEye4 ;    
+	    //try w/o normalization but by removing any values below1. putting 1 as min caused values dipping below 0... not good, prob not correct thing to do. 
 	  }
 	}
 	
-	const unsigned int nBins = 1000;
-	const double tracebin = 1e-7;
-	telSim.ClearPhotons();
-	if (!telSim.HasPhotonTrace(FdConstants::eFluorDirect))
-	  telSim.MakePhotonTrace(FdConstants::eFluorDirect,1);
-	if (!telSim.HasRayTracedPhotonTrace())
-	  telSim.MakeRayTracedPhotonTrace(nBins, tracebin);
-	telSim.ClearRayTracedPhotonTrace();	
+	// const unsigned int nBins = 1000;
+	// const double tracebin = 1e-7;
+	
+	//	telSim.SetNumberOfPhotonBins(8000);
+	//	telSim.SetNumberOfPhotonBins(8000);
+	//	telSim.SetNumberOfPhotonBins(700);
+	
+	 telSim.ClearPhotons();
+	// if (!telSim.HasPhotonTrace(FdConstants::eFluorDirect))
+	//   telSim.MakePhotonTrace(FdConstants::eFluorDirect,1);
+	// if (!telSim.HasRayTracedPhotonTrace())
+	//   telSim.MakeRayTracedPhotonTrace(nBins, tracebin);
+	// telSim.ClearRayTracedPhotonTrace();	
 	
 
+	//ROOT OUTPUT TO CHECK THE SIGNAL BEFORE THE PHOTON CREATION
+       	if (fdoprecheck){
+	  
+	  //mitchell command to make TCutG of hexagonal pixel. 
+	  makePixels(eyeId,telId);
+	  //return a tree on which to apply the graphical cut 
+	  fSimDataTree = makeTelDataTree(telId, telAxis, eyeId, eyeCS);
+	  fSimDataTree->Print();
+
+	  
+	  //init canvas for visual of data in tel cs with grid
+	  TCanvas* c1 = new TCanvas("c1","c1",600,600);
+	  gStyle->SetOptStat(0);
+	  //check pixel grid overlay
+	  TString hTelName("hTelCS"); hTelName+=eyeId; hTelName+=telId;
+	 
+	  TH2F* hTelCS = new TH2F(hTelName, hTelName,60,-17,17,60,0,32);
+	  c1->SetRightMargin(0.16);
+	  fSimDataTree->Project(hTelName,"elevation:azimuth","nphotons*(time<72e-6)");
+	  hTelCS->Draw("colz");
+	  for(int ipix = 0; ipix < pixelCuts.size(); ipix++){
+	    if(detTel.GetPixel(ipix+1).GetColumn()==10) pixelCuts[ipix]->SetLineWidth(2);
+	    if(detTel.GetPixel(ipix+1).GetRow()==10) pixelCuts[ipix]->SetLineWidth(2);
+	    pixelCuts[ipix]->Draw("L");	    
+	  }
+	  c1->SaveAs((TString)hTelCS->GetName()+".png");
+	 
+	  //20columns 22rows. 
+	  //output traces for column
+	  MakeTraces("Column",10,72e-6,1e-6,detTel, telId, eyeId);
+	  //output traces for row 
+	  //	  MakeTraces("Row",10,300e-6,0.5e-6,detTel, telId, eyeId);
+	  
+	}//doprecheck
 	
 
 	//This is the creation of photons
 	for(int iCell=0; iCell<fNPhotonsToCreate;iCell+=fPhotonDiscr){
+	  
+	  //check if we are in the window of interest.
+
+	  if(!(ELVESData[iCell].time >= (fLoop-1)*0.0001 && ELVESData[iCell].time < (fLoop)*0.0001)) continue;
+	  //	 if(fLoop == 1 && !(ELVESData[iCell].time >= 0. && ELVESData[iCell].time < 0.00072)) continue;
 
 	 if (ELVESData[iCell].nphotonsnormalized < 1.0) continue;//is this fair?
 
+	  //	  double photonNumber = ELVESData[iCell].nphotonsnormalized;
 	  for(int iPhoton=0; iPhoton<fNumDiaGridPoints; iPhoton++){
+
+	    // Generating random point on the diaphragm
+	    // Uniform phi
 	    
 	    const double diaPh = RandFlat::shoot(&fRandomEngine->GetEngine(), 0.0, kTwoPi);
 	    const double diaR = rDia * sqrt(RandFlat::shoot(&fRandomEngine->GetEngine(), 0.2, 1.0));
@@ -331,7 +401,11 @@ ELVESSimulator::Run(evt::Event& event)
 	    const double yDia = diaR * sin(diaPh);
 	    const Point pIn(xDia, yDia, 0.0, telCS);
 	 	      
-	    double photonTime=(ELVESData[iCell].time);
+	    //	    double photonTime=(ELVESData[iCell].time  - (fLoop-1)*0.00007)*1e9;//need floop to reset time at each event to 0. Also need nanoseconds? and need to shift by 30 us to stay away form pedestals... attempt
+	    double photonTime=(ELVESData[iCell].time  - (fLoop-1)*100e-6)*1e9;
+	    //photonTime = round(photonTime/100)*100;
+	    //photonTime = round(photonTime/1000)*1000;//should the binning be done here or in post processing?
+	    //cout << photonTime << endl;
 	    
 	    Vector nIn (1.,(ELVESData[iCell].positions-pIn).GetTheta(telCS),(ELVESData[iCell].positions-pIn).GetPhi(telCS), telCS, Vector::kSpherical);
 	    
@@ -347,6 +421,15 @@ ELVESSimulator::Run(evt::Event& event)
     } // End loop over Eyes
   }//fStatus
   
+  //Notes: the weights are working
+  // however, I would like to find the way to start the traces earlier, to take advantage of full trace
+  // also, in CompStudy, i am trying to read out the files properly so that i can overlay traces from both data and simualtion.
+  // the header names and the a lot of other stuff still cause the codes to complain.
+  // the profiles still don;t seem too right. Maybe it is because we are lloking at the traces with a weird binning.,
+  //AH still, it seems the coverage we were getting before, is not the same on the wole FOV. Not enough pixels are covered.
+  //CID seem to be the cause of double elves. I would like to look into them more. as well as magnetic effects!
+  
+  // fInit = true; //initialization actually done at first round now it's time to generate photons
 
   
   fStatus = eGeneratePhotons;  
@@ -437,6 +520,26 @@ ELVESSimulator::MakeTraces(TString rctag,int rcnum,double maxtime,double timebin
   return eSuccess;
 }
 
+TTree* ELVESSimulator::makeTelDataTree(int telId, Vector telAxis, int eyeId,  CoordinateSystemPtr  eyeCS ){
+  TString tName("t"); tName+=eyeId; tName+=telId; tName+=".root";
+  TTree* tTMP = new TTree(tName,tName);
+  double tTime, tElevation, tAzimuth, tNPhotons;
+  TBranch *bTime = tTMP->Branch("time",&tTime);
+  TBranch *bElevation = tTMP->Branch("elevation",&tElevation);
+  TBranch *bAzimuth = tTMP->Branch("azimuth",&tAzimuth);
+  TBranch *bNPhotons = tTMP->Branch("nphotons",&tNPhotons);
+  
+  for(int iCell=0; iCell<fNPhotonsToCreate;iCell+=fPhotonDiscr){
+    tElevation = 90.-ELVESData[iCell].positions.GetTheta(eyeCS)/deg;
+    tAzimuth = (ELVESData[iCell].positions.GetPhi(eyeCS)-telAxis.GetPhi(eyeCS))/deg;
+    tTime = ELVESData[iCell].time;
+    tNPhotons = ELVESData[iCell].nphotonsnormalized;
+    tTMP->Fill();
+  }//entries
+
+  return tTMP;
+}
+
 VModule::ResultFlag
 ELVESSimulator::ELVESSimDataCreator(){
   
@@ -447,134 +550,107 @@ ELVESSimulator::ELVESSimDataCreator(){
   UTMPoint elvesSimulatedLocationUTM(0.0, 0.0, SimulationParameters.AltSource, ellipsoid);//altitude does matter. This is just for reference
   UTMPoint elvesWantedLocationUTM(fELVESCenterLat, fELVESCenterLon, SimulationParameters.AltSource, ellipsoid);
   const CoordinateSystemPtr WantedLocationCS =  fwk::LocalCoordinateSystem::Create(elvesWantedLocationUTM.GetPoint());
-  CoordinateSystemPtr SimulatedLocationCS =  fwk::LocalCoordinateSystem::Create(elvesSimulatedLocationUTM.GetPoint());
+  const CoordinateSystemPtr SimulatedLocationCS =  fwk::LocalCoordinateSystem::Create(elvesSimulatedLocationUTM.GetPoint());
   
   //initializa the eye's CS to be able to calculate the arrival time with respect to each. 
   const fdet::Eye& eye1 = Detector::GetInstance().GetFDetector().GetEye(1);
-  const  CoordinateSystemPtr& eye1CS = eye1.GetEyeCoordinateSystem();
+  const CoordinateSystemPtr& eye1CS = eye1.GetEyeCoordinateSystem();
   const fdet::Eye& eye2 = Detector::GetInstance().GetFDetector().GetEye(2);
-  const  CoordinateSystemPtr& eye2CS = eye2.GetEyeCoordinateSystem();
+  const CoordinateSystemPtr& eye2CS = eye2.GetEyeCoordinateSystem();
   const fdet::Eye& eye3 = Detector::GetInstance().GetFDetector().GetEye(3);
-  const  CoordinateSystemPtr& eye3CS = eye3.GetEyeCoordinateSystem();
+  const CoordinateSystemPtr& eye3CS = eye3.GetEyeCoordinateSystem();
   const fdet::Eye& eye4 = Detector::GetInstance().GetFDetector().GetEye(4);
   const CoordinateSystemPtr& eye4CS = eye4.GetEyeCoordinateSystem();
   
-  int initialized, finalized;
   
   //initialize the variables for the input tree. 
   TVector3* position = 0;
-  Double_t time;
-  Double_t n;
-  vector<double> nvectmp(fNumTreeEntries);
-  vector<double> timevectmp(fNumTreeEntries);
-  vector<double> thetavectmp(fNumTreeEntries);
-  vector<double> phivectmp(fNumTreeEntries);
-  vector<double> radiusvectmp(fNumTreeEntries);
-  //TBD: Final structure of Input files
-  fTree->SetBranchAddress("position", &position);
-  fTree->SetBranchAddress("nN22P", &n);
-  fTree->SetBranchAddress("time", &time);
-        
-  	  
+  //    double radiusVar, phiVar, time, n, thetaVar;
+    float radiusVar, phiVar, time, n, thetaVar;
+
+  
+  if(fprodversion == 0){
+    fTree->SetBranchAddress("position", &position);
+    fTree->SetBranchAddress("nN22P", &n);
+    fTree->SetBranchAddress("time", &time);
+  }
+  if(fprodversion == 1){
+    fTree->SetBranchAddress("radius", &radiusVar);
+    fTree->SetBranchAddress("theta", &thetaVar);
+    fTree->SetBranchAddress("phi", &phiVar);
+    fTree->SetBranchAddress("nN22P", &n);
+    fTree->SetBranchAddress("time", &time);
+  }
+  
   int previousProgress = -1;//for progress bar
   TGraph* hAtmo = new TGraph(fNumTreeEntries);
   TGraph* hGeom = new TGraph(fNumTreeEntries);
-    //("hAtmo","Atmospheric Attenuation; elevation angle (deg); atmo_corr");
 
   for(int i=0; i<fNumTreeEntries;i+=fPhotonDiscr){
-    fTree->GetEntry(i);
-    nvectmp[i]=n;
-    timevectmp[i]=time;
-    thetavectmp[i]=position->Theta();;
-    phivectmp[i]=position->Phi();
-    radiusvectmp[i]=position->Mag();
+    fTree->GetEntry(i);    
+    float thetaVarTMP, phiVarTMP, radiusVarTMP;
+    if(fprodversion == 0){
+      thetaVarTMP = position->Theta();
+      phiVarTMP =  position->Phi();
+      radiusVarTMP = position->Mag();
+    }
+    if(fprodversion == 1){
+      thetaVarTMP  = thetaVar;
+      phiVarTMP   =  phiVar;
+      radiusVarTMP = radiusVar;
+    } 
+    UTMPoint locationCellUTM(ellipsoid.LatitudeLongitudeHeightToPoint((90.*deg)-thetaVarTMP, phiVarTMP, radiusVarTMP-6370*km),ellipsoid);
+    
+    Point posTMP =   Point(locationCellUTM.GetPoint(SimulatedLocationCS).GetX(SimulatedLocationCS),
+			   locationCellUTM.GetPoint(SimulatedLocationCS).GetY(SimulatedLocationCS),
+			   locationCellUTM.GetPoint(SimulatedLocationCS).GetZ(SimulatedLocationCS),
+			   WantedLocationCS);
+    
+    ELVESSimData ESDtmp;
+    ESDtmp.timeEye1 = time+posTMP.GetR(eye1CS)/(kSpeedOfLight*pow(10,9));
+    ESDtmp.timeEye2 = time+posTMP.GetR(eye2CS)/(kSpeedOfLight*pow(10,9));
+    ESDtmp.timeEye3 = time+posTMP.GetR(eye3CS)/(kSpeedOfLight*pow(10,9));
+    ESDtmp.timeEye4 = time+posTMP.GetR(eye4CS)/(kSpeedOfLight*pow(10,9));
+
+    //the correction involves the einstein coefficient 2E7, the \Delta t, r, theta, phi, and the arc length is calculated at the 90 km altitude. This is to convert the number density to number of photons in individual cells. Also the output of the simulation integrates over XTimeIntegratedSteps, so a division needs to be done here. 
+    ESDtmp.nphotons = (n/SimulationParameters.TimeIntegratedSteps)*2E7*SimulationParameters.SizeStepTime *
+      SimulationParameters.SizeStepRadiusHigh * SimulationParameters.SizeStepPhi * 6460E3 * SimulationParameters.SizeStepTheta * 6460E3 ;
+
+    //this is applying the geometric correction and atmoaspheric correction independently for the individual eyes, wrt to what the elves looks like in their corrd. sys. ATMO TBD!!! 
+
+    double atmocorrEye1, atmocorrEye2, atmocorrEye3, atmocorrEye4;
+    double KYParam_a = 0.50572, KYParam_b = 6.07995*deg, KYParam_c = 1.6364; //Kasten and Young 1989.. careful all defined in degrees, while points are in rad
+    double VODTot = 0.6;
+    if(fdoatmocorr){    
+      atmocorrEye1=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye1CS))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye1CS) + KYParam_b)/deg,-KYParam_c)));
+      hAtmo->SetPoint(i,90.-posTMP.GetTheta(eye1CS)/deg, atmocorrEye1);
+
+      atmocorrEye2=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye2CS))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye2CS) + KYParam_b)/deg,-KYParam_c)));
+      atmocorrEye3=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye3CS))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye3CS) + KYParam_b)/deg,-KYParam_c)));
+      atmocorrEye4=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye3CS))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye4CS) + KYParam_b)/deg,-KYParam_c)));
+    }else{
+      atmocorrEye1=1; atmocorrEye2=1; atmocorrEye3=1;atmocorrEye4=1;
+    }
+
+    double geomcorrEye1, geomcorrEye2, geomcorrEye3,geomcorrEye4;
+    if(fdogeomcorr){
+      geomcorrEye1 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye1CS)*posTMP.GetR(eye1CS)));
+      hGeom->SetPoint(i,posTMP.GetR(eye1CS), geomcorrEye1);
+      geomcorrEye2 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye2CS)*posTMP.GetR(eye2CS)));
+      geomcorrEye3 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye3CS)*posTMP.GetR(eye3CS)));
+      geomcorrEye4 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye4CS)*posTMP.GetR(eye4CS)));      
+    }else{
+      geomcorrEye1=1; geomcorrEye2=1; geomcorrEye3=1;geomcorrEye4=1;
+    }
+    ESDtmp.nphotonsEye1 = ESDtmp.nphotons*atmocorrEye1*geomcorrEye1;
+    ESDtmp.nphotonsEye2 = ESDtmp.nphotons*atmocorrEye2*geomcorrEye2;
+    ESDtmp.nphotonsEye3 = ESDtmp.nphotons*atmocorrEye3*geomcorrEye3;
+    ESDtmp.nphotonsEye4 = ESDtmp.nphotons*atmocorrEye4*geomcorrEye4;
+    ESDtmp.positions = posTMP;//get it for each eye at time of photon creation
+    ELVESData.push_back(ESDtmp);
+    displayProgress(i,fNumTreeEntries,previousProgress);
   }
-
-  cout << " about to parallelize" << endl;
-    omp_set_dynamic(0);
-  omp_set_num_threads(8);
-  
-  // #pragma omp declare reduction (merge : std::vector<ELVESSimData> : omp_out.insert(omp_out.end(), omp_in.begin(), omp_in.end()))
-#pragma omp parallel private(SimulatedLocationCS)
-    {
-      //      std::vector<ELVESSimData> ELVESData_private;
-      std::vector<int> ELVESData_private;
-      //#pragma omp parallel for reduction(merge: ELVESData)
-#pragma omp for nowait
-
-	for(int i=0; i<fNumTreeEntries;i+=fPhotonDiscr){
-	  //    fTree->GetEntry(i);    
-	  //	    cout << thetavectmp[i] << " " << phivectmp[i] <<" "<< radiusvectmp[i] << endl;
-	  //    UTMPoint locationCellUTM(ellipsoid.LatitudeLongitudeHeightToPoint((90.*deg)-position->Theta(), position->Phi(), position->Mag()-6370*km),ellipsoid);
-	  UTMPoint locationCellUTM(ellipsoid.LatitudeLongitudeHeightToPoint((90.*deg)-thetavectmp[i], phivectmp[i], radiusvectmp[i]-6370*km),ellipsoid);
-	  // TString threadnum("YO5 "); threadnum+=omp_get_thread_num();
-	  //	  cout <<threadnum.Data() << en//dl;
-	  //	  cout << &locationCellUTM << endl;
-	  Point posTMP =   Point(locationCellUTM.GetPoint(SimulatedLocationCS).GetX(SimulatedLocationCS),
-				 locationCellUTM.GetPoint(SimulatedLocationCS).GetY(SimulatedLocationCS),
-				 locationCellUTM.GetPoint(SimulatedLocationCS).GetZ(SimulatedLocationCS),
-				 WantedLocationCS);
-	  cout << "YO4" << endl;
-	  
-	  ELVESSimData ESDtmp;
-	  ESDtmp.timeEye1 = timevectmp[i]+posTMP.GetR(eye1CS)/(kSpeedOfLight*pow(10,9));
-	  ESDtmp.timeEye2 = timevectmp[i]+posTMP.GetR(eye2CS)/(kSpeedOfLight*pow(10,9));
-	  ESDtmp.timeEye3 = timevectmp[i]+posTMP.GetR(eye3CS)/(kSpeedOfLight*pow(10,9));
-	  ESDtmp.timeEye4 = timevectmp[i]+posTMP.GetR(eye4CS)/(kSpeedOfLight*pow(10,9));
-	  /*
-	  
-	  //the correction involves the einstein coefficient 2E7, the \Delta t, r, theta, phi, and the arc length is calculated at the 90 km altitude. This is to convert the number density to number of photons in individual cells. Also the output of the simulation integrates over XTimeIntegratedSteps, so a division needs to be done here. 
-	  ESDtmp.nphotons = (nvectmp[i]/SimulationParameters.TimeIntegratedSteps)*2E7*SimulationParameters.SizeStepTime *
-	    SimulationParameters.SizeStepRadiusHigh * SimulationParameters.SizeStepPhi * 6460E3 * SimulationParameters.SizeStepTheta * 6460E3 ;
-	  
-	  //this is applying the geometric correction and atmoaspheric correction independently for the individual eyes, wrt to what the elves looks like in their corrd. sys. ATMO TBD!!! 
-	  //	  	  cout << "YO3" << endl;
-
-	  double atmocorrEye1, atmocorrEye2, atmocorrEye3, atmocorrEye4;
-	  double KYParam_a = 0.50572, KYParam_b = 6.07995*deg, KYParam_c = 1.6364; //Kasten and Young 1989.. careful all defined in degrees, while points are in rad
-	  double VODTot = 0.6;
-	  if(fdoatmocorr){    
-	    atmocorrEye1=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye1CS))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye1CS) + KYParam_b)/deg,-KYParam_c)));
-	    //      hAtmo->SetPoint(i,90.-posTMP.GetTheta(eye1CS)/deg, atmocorrEye1);
-	    
-	    atmocorrEye2=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye2CS))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye2CS) + KYParam_b)/deg,-KYParam_c)));
-	    atmocorrEye3=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye3CS))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye3CS) + KYParam_b)/deg,-KYParam_c)));
-	    atmocorrEye4=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye3CS))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye4CS) + KYParam_b)/deg,-KYParam_c)));
-	  }else{
-	    atmocorrEye1=1; atmocorrEye2=1; atmocorrEye3=1;atmocorrEye4=1;
-	  }
-	  //	  cout << "YO2" << endl;
-
-	  double geomcorrEye1, geomcorrEye2, geomcorrEye3,geomcorrEye4;
-	  if(fdogeomcorr){
-	    geomcorrEye1 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye1CS)*posTMP.GetR(eye1CS)));
-	    //      hGeom->SetPoint(i,posTMP.GetR(eye1CS), geomcorrEye1);
-	    geomcorrEye2 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye2CS)*posTMP.GetR(eye2CS)));
-	    geomcorrEye3 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye3CS)*posTMP.GetR(eye3CS)));
-	    geomcorrEye4 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye4CS)*posTMP.GetR(eye4CS)));      
-	  }else{
-	    geomcorrEye1=1; geomcorrEye2=1; geomcorrEye3=1;geomcorrEye4=1;
-	  }
-	  ESDtmp.nphotonsEye1 = ESDtmp.nphotons*atmocorrEye1*geomcorrEye1;
-	  ESDtmp.nphotonsEye2 = ESDtmp.nphotons*atmocorrEye2*geomcorrEye2;
-	  ESDtmp.nphotonsEye3 = ESDtmp.nphotons*atmocorrEye3*geomcorrEye3;
-	  ESDtmp.nphotonsEye4 = ESDtmp.nphotons*atmocorrEye4*geomcorrEye4;
-	  ESDtmp.positions = posTMP;//get it for each eye at time of photon creation
-	  //	  cout << "YO" << endl;
-	  */
-	  //	  ELVESData_private.push_back(ESDtmp);
-	  ELVESData_private.push_back(i);
-	  //displayProgress(i,fNumTreeEntries,previousProgress);
-	}
-#pragma omp critical
-	cout << " yo" << endl;  
-	//	ELVESData.insert(ELVESData.end(), ELVESData_private.begin(), ELVESData_private.end());
-}
-
-
-
-
-
+  cout << endl;
   if(fdoatmocorr){
     TCanvas *cAtmo = new TCanvas("cAtmo","cAtmo",800,600);
     hAtmo->SetTitle("Atmospheric Attenuation for Individual Grid Cells");
@@ -605,18 +681,22 @@ ELVESSimulator::ELVESSimDataCreator(){
   cout << "nPhotons Range at Source Point: " << ELVESData[0].nphotons  << " " << ELVESData[ELVESData.size()-1].nphotons << endl;
   sort(ELVESData.begin(), ELVESData.end(), by_nphotonsEye1());
   fNPhotonsMINEye1 = ELVESData[0].nphotonsEye1;
+  //fNPhotonsMINEye1 = 1;
   fNPhotonsMAXEye1 = ELVESData[ELVESData.size()-1].nphotonsEye1;
   cout << "nPhotons Range E1: " << ELVESData[0].nphotonsEye1  << " " << ELVESData[ELVESData.size()-1].nphotonsEye1 << endl;
   sort(ELVESData.begin(), ELVESData.end(), by_nphotonsEye2());
   fNPhotonsMINEye2 = ELVESData[0].nphotonsEye2;
+  //fNPhotonsMINEye2 = 1;
   fNPhotonsMAXEye2 = ELVESData[ELVESData.size()-1].nphotonsEye2;
   cout << "nPhotons Range E2: " << ELVESData[0].nphotonsEye2  << " " << ELVESData[ELVESData.size()-1].nphotonsEye2 << endl;
   sort(ELVESData.begin(), ELVESData.end(), by_nphotonsEye3());
   fNPhotonsMINEye3 = ELVESData[0].nphotonsEye3;
+  //fNPhotonsMINEye3 = 1;
   fNPhotonsMAXEye3 = ELVESData[ELVESData.size()-1].nphotonsEye3;
   cout << "nPhotons Range E3: " << ELVESData[0].nphotonsEye3  << " " << ELVESData[ELVESData.size()-1].nphotonsEye3 << endl;
   sort(ELVESData.begin(), ELVESData.end(), by_nphotonsEye4());
   fNPhotonsMINEye4 = ELVESData[0].nphotonsEye4;
+  //  fNPhotonsMINEye4 = 1;
   fNPhotonsMAXEye4 = ELVESData[ELVESData.size()-1].nphotonsEye4;
   cout << "nPhotons Range E4: " << ELVESData[0].nphotonsEye4  << " " << ELVESData[ELVESData.size()-1].nphotonsEye4 << endl;
   sort(ELVESData.begin(), ELVESData.end(), by_timeEye1());

@@ -29,6 +29,7 @@ where configuration files are copied. -->
   <!-- Specify what you are planning to simulate: SD, FD, Hy -->
   <mode> FD </mode>
 
+
   <eventIdentifier>
     <libraryIdentifier> Test </libraryIdentifier>
     <format> Library_%1%:Run_%2%:Shower_%3%:Use_%4% </format>
@@ -36,20 +37,29 @@ where configuration files are copied. -->
     <sdIdFormat> 2 2 </sdIdFormat>
   </eventIdentifier>
 
-  <coreRandomization>
-    <eye> 1 </eye>
-    <telescope> 4 </telescope>  <!-- This also supports 'fractions' of telescopes  -->
-    <maxdist unit ="meter"> 10000.0 </maxdist> 
-    <rMaxEnergyDependent> no </rMaxEnergyDependent>
-    <deltaphi unit="deg"> 5  </deltaphi> <!-- Full azimuthal width of slice -->
-    <altitude unit="meter"> 1419 </altitude>
-  </coreRandomization>
-
+    
+ <coreRandomization>
+   <eye> 1 </eye>
+   <telescope> 4 </telescope>  <!-- This also supports 'fractions' of telescopes  -->
+   <maxdist unit ="meter"> 10000.0 </maxdist>
+   <rMaxEnergyDependent> no </rMaxEnergyDependent>
+   <deltaphi unit="deg"> 5  </deltaphi> <!-- Full azimuthal width of slice -->
+   <altitude unit="meter"> 1419 </altitude>
+ </coreRandomization>
+ 
+  
   <!-- Time stamp of the core impact on ground -->
-  <eventTime> 2004-01-01T04:33:12.5 </eventTime>
-
-  <!-- Use core position and/or time from radio event data -->
-  <useRadioCorePosition>0</useRadioCorePosition>
-  <useRadioEventTime>0</useRadioEventTime>
+  <!--eventTime>
+    2004-01-01T04:33:12.5
+    </eventTime-->
+  <timeInterval>
+    <timeOrdered>
+      <nEvents> 10 </nEvents>
+      <timeRandomized> 0 </timeRandomized>
+    </timeOrdered>
+    <startTime> 2017-01-01T04:33:12.5000 </startTime>
+    <endTime> 2017-01-01T04:33:12.5010 </endTime>
+  </timeInterval>
 
 </EventGenerator>
+
