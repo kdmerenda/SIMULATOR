@@ -143,6 +143,7 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
   VModule::ResultFlag Finish();
   VModule::ResultFlag makePixels(int, int);
   VModule::ResultFlag MakeTraces(TString ,int,double,double , const fdet::Telescope&, int, int);
+  VModule::ResultFlag RadialAnalysis(utl::CoordinateSystemPtr, utl::CoordinateSystemPtr, Double_t); 
   TTree* makeTelDataTree(int, utl::Vector, int, utl::CoordinateSystemPtr);
   
  private:
@@ -151,6 +152,7 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
   double fELVESCenterLon;
   int fNumDiaGridPoints;
   int fPhotonDiscr;
+  double fVODTot;
   int fNumTreeEntries;
   std::string fELVESInputName;
   std::string fELVESTreeName;

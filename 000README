@@ -3,4 +3,5 @@ ELVESSimulator.2.0 is the code that outputed the output sent out to the devel te
 ELVESSimulator.3.0 is good for 1st page
 ELVESSimulator.4.0 is good for prod with bash script for many files and with multiple pages output
 PROD_ELVESSimulator is the version used for production and analysis (duplicates could be made)
-FORK_ELVESSimulator is the devel version, currently attempting a parrallel version of 4.0, without multi page outputs
+PARA_ELVESSimulator is the devel version, currently attempting a parrallel version of 4.0, without multi page outputs
+FORK_ELVESSimulator is a version of ELVESSimulator.4.0 but with changes to plot the traces for the gapnote of elev
