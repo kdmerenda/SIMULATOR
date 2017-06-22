@@ -12,7 +12,7 @@
       <!--module> EventGeneratorOG </module-->
       <module> ELVESSimulator </module>
       
-      <loop numTimes="3" pushEventToStack="yes">
+      <loop numTimes="1" pushEventToStack="yes">
 	<module> EventGeneratorOG </module>
 	<module> ELVESSimulator </module>
 	

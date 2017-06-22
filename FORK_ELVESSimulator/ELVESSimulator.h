@@ -173,9 +173,12 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
   int fMaster = 0;
   OutputTreeVariables SimulationParameters;
   TTree* fSimDataTree;
+  double fSimTimeStart;
+  double fSimTimeEnd;
   int fdogeomcorr;
   int fdoatmocorr;
   int fdoprecheck;
+  int fdoradial;
   int fprodversion;
   double fNPhotonsMIN;
   double fNPhotonsMAX;
@@ -199,6 +202,7 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
   Status fStatus;
 
   std::vector<TCutG*> pixelCuts;
+  std::vector<utl::Point> pixelIonoPoints;
 
   REGISTER_MODULE("ELVESSimulator",ELVESSimulator);
   

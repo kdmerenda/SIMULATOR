@@ -109,6 +109,7 @@ ELVESSimulator::Init()
   topB.GetChild("NumberOfTreeEntries").GetData(fNumTreeEntries);
   topB.GetChild("FrameSelection").GetData(fLoopSelect);
   topB.GetChild("PreCheck").GetData(fdoprecheck);
+  topB.GetChild("RadialAnalysis").GetData(fdoradial);
   topB.GetChild("ProdVersion").GetData(fprodversion);
   topB.GetChild("GeometricCorrection").GetData(fdogeomcorr);
   topB.GetChild("AtmosphericCorrection").GetData(fdoatmocorr);
@@ -117,8 +118,9 @@ ELVESSimulator::Init()
   fIn = new TFile(fELVESInputName.data());
   fTree = (TTree*)fIn->Get(fELVESTreeName.data());
   if (fNumTreeEntries == 0) fNumTreeEntries = fTree->GetEntries();
-  //(if set to zero, run over all entries)
-
+  fSimTimeStart = fTree->GetMinimum("time");
+  fSimTimeEnd = fTree->GetMaximum("time");
+  
   fParameterTree = (TTree*)fIn->Get(fELVESParameterTreeName.data());
   fParameterTree->SetBranchAddress("parameters", &SimulationParameters);
   fParameterTree->GetEntry(0);
@@ -136,6 +138,7 @@ ELVESSimulator::Init()
           "    Number of Tree Entries: " << fNumTreeEntries << "\n"
           "            Frame Selected: " << fLoopSelect << "\n"
           "               Do PreCheck: " << fdoprecheck << "\n"
+          "        Do Radial Analysis: " << fdoradial << "\n"
           "        Production Version: " << fprodversion << "\n"
           " Do Atmospheric Correction: " << fdoatmocorr << "\n"
           "   Do Geometric Correction: " << fdogeomcorr << "\n"
@@ -524,9 +527,32 @@ ELVESSimulator::MakeTraces(TString rctag,int rcnum,double maxtime,double timebin
 VModule::ResultFlag 
 ELVESSimulator::RadialAnalysis(CoordinateSystemPtr LocalCS, CoordinateSystemPtr Eye1CS,Double_t Eye1TimeMIN) 
 {  
-  //order of struct doesnt matter. 
   gStyle->SetOptStat(0);
+  
+  //getting pixel intercept with ionosphere for eye1, tel3
+  int eyeId = 1;
+  int telId = 3;
+  const fdet::Eye& eye = Detector::GetInstance().GetFDetector().GetEye(eyeId);
+  const fdet::Telescope& tel = eye.GetTelescope(telId);
+  const CoordinateSystemPtr& eyeCS = eye.GetEyeCoordinateSystem();
 
+  std::vector<utl::Point> pixelIonoPoints;
+  for (unsigned int channelId = 1; channelId <= tel.GetLastPixelId(); ++channelId) {
+    const fdet::Channel& detChannel = tel.GetChannel(channelId);
+    unsigned int pixelId = detChannel.GetPixelId();
+    const fdet::Pixel& pixel = tel.GetPixel(pixelId);
+    Vector pixAxis = pixel.GetDirection();
+
+    if(pixel.GetColumn()!= 10) continue;
+
+    //create vector of points to display on ion base. 
+    //    Double_t distPixelIonoPoint = 80000./TMath::Cos(pixAxis.GetTheta(eyeCS));
+    //    Double_t distPixelIonoPoint = 80000./TMath::Cos(pixAxis.GetTheta(eyeCS));
+    // Point pixelIonoPoint(distPixelIonoPoint*TMath::Sin(pixAxis.GetTheta(eyeCS))*TMath::Cos(pixAxis.GetPhi(eyeCS)),distPixelIonoPoint*TMath::Sin(pixAxis.GetTheta(eyeCS))*TMath::Sin(pixAxis.GetPhi(eyeCS)),distPixelIonoPoint*TMath::Cos(pixAxis.GetTheta(eyeCS)),LocalCS);
+    pixelIonoPoints.push_back(pixelIonoPoint);
+    cout << pixelIonoPoint.GetRho(LocalCS) << endl;
+  }
+  
   double tTime, tPolar, tAzimuth, tNPhotons, tDistance, tX, tY, tZ, tRho;
   TH1D * hAzimuth = new TH1D("hAzimuth","Altitude Integrated Intensity;Azimuth (degrees);Number of Photons",80,-190,190);
   //phi goes from -180 to 180
@@ -537,13 +563,23 @@ ELVESSimulator::RadialAnalysis(CoordinateSystemPtr LocalCS, CoordinateSystemPtr 
   TH1D * hIntensityE = new TH1D("hIntensityE","Altitude Integrated Intensity: |#phi| < 0.01 rad;Distance from ELVES Center (km);Number of Photons / 5 km Bins",30,0,300);
   TH1D * hIntensityW = new TH1D("hIntensityW","Altitude Integrated Intensity: |#phi| < 0.01 rad;Distance from ELVES Center (km);Number of Photons / 5 km Bins",30,0,300);
 
+  int numPlots = 60;
+  double timeWidth = 10e-6;
+  int numSkip = 1;
+  TH1D * hIntensityVec[numPlots];
+  TH1D * hIntensitySDVec[numPlots];
+  for(int iPlot=0; iPlot<numPlots;iPlot++){
+    TString titletmp("hIntensity");titletmp+=iPlot;
+    TString titletmp2("hIntensitySD");titletmp2+=iPlot;
+    hIntensityVec[iPlot] = new TH1D(titletmp,"Altitude Integrated Intensity;Distance from ELVES Center (m);  Number of Photons / 3 km Bins",100,0,300000);    
+    hIntensitySDVec[iPlot] = new TH1D(titletmp2,"Surface Photon Density; Distance from ELVES Center (m);  Surface Photon Density",100,0,300000);
+  }
+  
   for(int iCell=0; iCell<fNPhotonsToCreate;iCell+=fPhotonDiscr){
 
+    
     tAzimuth =  ELVESData[iCell].positions.GetPhi(LocalCS); 
     tPolar = ELVESData[iCell].positions.GetTheta(LocalCS);
-
-    //cut on the azimuth to only select a slice
-    //    if(TMath::Abs(tAzimuth) > 0.01) continue;
 
     //recover the original time... 
     tTime = ELVESData[iCell].timeEye1 + Eye1TimeMIN - ELVESData[iCell].positions.GetR(Eye1CS)/(kSpeedOfLight*pow(10,9));
@@ -551,6 +587,15 @@ ELVESSimulator::RadialAnalysis(CoordinateSystemPtr LocalCS, CoordinateSystemPtr 
     //calculate the distance from the center of the ring
     tDistance = ELVESData[iCell].positions.GetR(LocalCS)*TMath::Sin(tPolar);
     tNPhotons = ELVESData[iCell].nphotons;//post corrections
+
+    
+    for(int iPlot=0; iPlot<numPlots;iPlot++){
+      if(tTime-fSimTimeStart < (iPlot*numSkip+1)*timeWidth && tTime-fSimTimeStart > (iPlot*numSkip)*timeWidth){
+	hIntensityVec[iPlot]->Fill(ELVESData[iCell].positions.GetRho(LocalCS),tNPhotons);
+	break;
+      }
+    }
+
     hIntensity->Fill(tDistance,tNPhotons);
     
     hAzimuth->Fill(tAzimuth/deg,tNPhotons);
@@ -570,12 +615,30 @@ ELVESSimulator::RadialAnalysis(CoordinateSystemPtr LocalCS, CoordinateSystemPtr 
   }
 
   for(int iBin = 1; iBin < hIntensitySD->GetNbinsX(); iBin++){
-    double binContent = hIntensity->GetBinContent(iBin) / (2*TMath::Pi()*(hIntensity->GetBinCenter(iBin+1)*hIntensity->GetBinCenter(iBin+1) - hIntensity->GetBinCenter(iBin)*hIntensity->GetBinCenter(iBin))) ;
+    double binContent = hIntensity->GetBinContent(iBin) / (TMath::Pi()*(hIntensity->GetBinCenter(iBin+1)*hIntensity->GetBinCenter(iBin+1) - hIntensity->GetBinCenter(iBin)*hIntensity->GetBinCenter(iBin))) ;
     hIntensitySD->SetBinContent(iBin,binContent);
+  }
+
+  TCanvas* cradial = new TCanvas("cradial","cradial",1000,800);
+  int dogif = 0;
+  if(dogif){
+    for(int iPlot=0; iPlot<numPlots;iPlot++){
+      for(int iBin = 1; iBin < hIntensitySDVec[iPlot]->GetNbinsX(); iBin++){
+	double binContent = hIntensityVec[iPlot]->GetBinContent(iBin) / (TMath::Pi()*(hIntensityVec[iPlot]->GetBinCenter(iBin+1)*hIntensityVec[iPlot]->GetBinCenter(iBin+1) - hIntensityVec[iPlot]->GetBinCenter(iBin)*hIntensityVec[iPlot]->GetBinCenter(iBin))) ;
+	hIntensitySDVec[iPlot]->SetBinContent(iBin,binContent);
+      }
+      hIntensitySDVec[iPlot]->GetYaxis()->SetTitleOffset(1.3);
+      hIntensitySDVec[iPlot]->GetYaxis()->SetRangeUser(0,1e11);
+      hIntensitySDVec[iPlot]->SetLineWidth(2.0);
+      hIntensitySDVec[iPlot]->Draw();
+      TString titletmpname(""); titletmpname+=(iPlot*numSkip+1)*timeWidth;
+      hIntensitySDVec[iPlot]->SetTitle(titletmpname);
+      TString fileouttmpname("outputs/radial/RadialSD");fileouttmpname+=iPlot;fileouttmpname+=".png";
+      cradial->SaveAs(fileouttmpname);
+    }
   }
   
   TLegend* lradial = new TLegend(0.65,0.65,0.85,0.85);
-  TCanvas* cradial = new TCanvas("cradial","cradial",1000,800);
   hIntensity->GetYaxis()->SetTitleOffset(1.5);
   hIntensity->SetLineWidth(2.0);
   hIntensity->Draw();				
@@ -821,7 +884,7 @@ ELVESSimulator::ELVESSimDataCreator(){
     Alright, now the data should be in a format that can be used easily to create the photons in the telescope simulator. A struct was created to contain each of the grid cells simulated with the number density changing through time wrt to each eyes. The next step is to loop through the telescopes and start adding events. ... checks of the data have been done and where presented in Malargue March 2017.  
      */
 
-  if(fdoprecheck){
+  if(fdoradial){
     INFO("Radial Analysis in Progress.");
     RadialAnalysis(WantedLocationCS,eye1CS,timeEye1MIN);
   }
@@ -861,11 +924,12 @@ ELVESSimulator::makePixels(int eyeId, int telId) {
   
   pixelCuts.clear();
   TCutG* cut;
+
   for (unsigned int channelId = 1; channelId <= tel.GetLastPixelId(); ++channelId) {
     const fdet::Channel& detChannel = tel.GetChannel(channelId);
     unsigned int pixelId = detChannel.GetPixelId();
     const fdet::Pixel& pixel = tel.GetPixel(pixelId);
-    Vector pixAxis = pixel.GetDirection();    
+    Vector pixAxis = pixel.GetDirection();
     Double_t centerX = pixAxis.GetPhi(eyeCS)/deg - telPhi/deg;
     Double_t centerY = 90.-pixAxis.GetTheta(eyeCS)/deg;
     Double_t r = 1.5/1.8;
