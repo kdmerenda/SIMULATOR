@@ -3,7 +3,7 @@
 clear
 
 #location of offline xml path to be changed
-offlinePath=/home/kswiss/Workspace/workoffline/simulator/PROD_ELVESSimulator
+offlinePath=/home/kswiss/Workspace/workoffline/simulator/FORK_ELVESSimulator
 
 elvesSimulatorXML="$offlinePath/ELVESSimulator.xml"
 eventFileExporterXML="$offlinePath/EventFileExporter.xml"
@@ -13,8 +13,6 @@ echo "     $elvesSimulatorXML"
 echo "     $eventFileExporterXML"
 
 fileList="$offlinePath/ScanList"
-
-counter=1
 
 #initializing the line with the placer
 oldline=$(echo XXXXX)

@@ -1,0 +1,7 @@
+First success at seeing tracks of photns through detector.
+
+That day i tried to normalize the number of phtons from each pixels to be able to draw the traces, but it seemed either the information was wrong or that the dynamic range of the number density was too large for me to create all the corrections possible.
+
+Also, after meeting with marshall, he confirmed it was a number density and not just a number, hence the nphoton per cell after geom correction should be done properly then. this was pushed on git hub.
+
+Also, the one needs to be out of drum mode to be able to run the weights of individual phtoons properly. This is in files 3 and 4 that has the correct weights inthe traces. files 1 and 2 has the normalized number of photns. Worth checking. 

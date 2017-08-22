@@ -12,29 +12,39 @@ echo "The following files will be temporarily altered:"
 echo "     $elvesSimulatorXML"
 echo "     $eventFileExporterXML"
 
-fileList="$offlinePath/ScanList"
+fileList="$offlinePath/ScanList2"
 
 counter=1
 
 #initializing the line with the placer
-oldline=$(echo XXXXX)
+oldlineLON=$(echo XXXXX)
+oldlineLAT=$(echo YYYYY)
+oldlineOUT=$(echo ZZZZZ)
 
 #LOOP to start the computing by simply reading the file line by line
+counter=1
 while IFS='' read -r line || [[ -n "$line" ]]; do
+
+    IFS=" " read varLAT varLON <<< "$line"
+    varOUT="ELVES_$counter"
+    sed -i -- "s/$oldlineLAT/$varLAT/g" "$elvesSimulatorXML"
+    sed -i -- "s/$oldlineLON/$varLON/g" "$elvesSimulatorXML"
+    sed -i -- "s/$oldlineOUT/$varOUT/g" "$eventFileExporterXML"
     
-    #    echo "OldLine: $oldline, NewLine: $line"
-    sed -i -- "s/$oldline/$line/g" "$elvesSimulatorXML"
-    sed -i -- "s/$oldline/$line/g" "$eventFileExporterXML"
-    oldline="$line"
-#    echo $oldline
+    oldlineLAT="$varLAT"
+    oldlineLON="$varLON"
+    oldlineOUT="$varOUT"
+    echo $oldlineOUT $oldlineLAT $oldlineLON
     (./elves);
-	
+    counter=$((counter+1))
+    
 done < "$fileList"
 
 
 #cleaning up
-sed -i -- "s/$oldline/XXXXX/g" "$elvesSimulatorXML"
-sed -i -- "s/$oldline/XXXXX/g" "$eventFileExporterXML"
+sed -i -- "s/$oldlineLON/XXXXX/g" "$elvesSimulatorXML"
+sed -i -- "s/$oldlineLAT/YYYYY/g" "$elvesSimulatorXML"
+sed -i -- "s/$oldlineOUT/ZZZZZ/g" "$eventFileExporterXML"
 
 echo All Cleaned and Done
 

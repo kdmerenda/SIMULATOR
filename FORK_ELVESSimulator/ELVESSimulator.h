@@ -48,18 +48,21 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
   };
 
   struct ELVESSimData { 
-    double timeEye1;
-    double timeEye2;
-    double timeEye3;
-    double timeEye4;
-    double time;
-    double nphotons;
-    double nphotonsEye1;
-    double nphotonsEye2;
-    double nphotonsEye3;
-    double nphotonsEye4;
-    double nphotonsnormalized;
-    utl::Point positions;
+    float timeEye1;
+    float timeEye2;
+    float timeEye3;
+    float timeEye4;
+    float time;
+    float nphotons;
+    float nphotonsEye1;
+    float nphotonsEye2;
+    float nphotonsEye3;
+    float nphotonsEye4;
+    float nphotonsnormalized;
+    float X;//in elves local cs
+    float Y;
+    float Z;
+    //utl::Point positions;
   };
         
       struct by_timeEye1 { 
@@ -141,6 +144,7 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
   VModule::ResultFlag Run(evt::Event& e);
   VModule::ResultFlag ELVESSimDataCreator();
   VModule::ResultFlag Finish();
+  Double_t myCB(Double_t *, Double_t *);
   VModule::ResultFlag makePixels(int, int);
   VModule::ResultFlag MakeTraces(TString ,int,double,double , const fdet::Telescope&, int, int);
   VModule::ResultFlag RadialAnalysis(utl::CoordinateSystemPtr, utl::CoordinateSystemPtr, Double_t); 
@@ -158,6 +162,7 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
   std::string fELVESTreeName;
   std::string fELVESParameterTreeName;
   TTree* fTree;
+  TTree* fTreeSim;
   TTree* fParameterTree;
   TFile* fIn;
   utl::ShadowPtr<utl::Point> fPosition;
@@ -196,6 +201,13 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
   std::vector<ELVESSimData> ELVESData;
   std::vector<TimeCutIndices> PhotonLoops100us;
 
+  utl::CoordinateSystemPtr eye1CSSim;
+  utl::CoordinateSystemPtr eye2CSSim; 
+  utl::CoordinateSystemPtr eye3CSSim; 
+  utl::CoordinateSystemPtr eye4CSSim; 
+  utl::CoordinateSystemPtr eyeCSSim; 
+
+  
   int fLoop;
   int fLoopSelect;
   bool fInit;

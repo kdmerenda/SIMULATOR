@@ -1,0 +1,30 @@
+THis has the files for a simulated event with peak current 150000, which seems to be to high for the amplitude, even with atmo on. THis is located for Run5254 Evt6336, Eye1, Tel3 comparaison. There is a problem with traces still too sharp wrt one another... there should be less of an amplitude change between rows.  attempt at comparaison needed.
+
+Also this was for Auger3D_5kmSource_FINE_1000m_1000pt_500ns_SIBC_0.5c_MTLE_1.5e05
+
+note that attempts with Ic = 100000 are too dim to be seen on the detector with atm. Need to simualte smthg halfway. Also diff between 0,5 vs 0m7c needs to be checed. 
+
+
+
+FYI on XML for sim:
+
+  <NumberOfDiaphragmEntryPoints> 1 </NumberOfDiaphragmEntryPoints>
+
+  <!-- Number of simulation entries to skip when creating photons. 1 is minimum, or else for loop wont increment-->
+    <PhotonDiscretization> 1 </PhotonDiscretization>
+
+  <!-- 0 means inactive, uses all entries. Or put a number to loop through X first tree entries in tree with ELVESTreeName -->
+    <NumberOfTreeEntries> 000000 </NumberOfTreeEntries>
+
+  <!-- Frame Selection of 0 means no constraint on which 100 us frame is selected. Also, amount of loops in module sequence is not important. THough, if wanting to select a\
+   frame, make sure loop is set to 1 in module sequence. eg: 2, this will select the frame from 100-200 us... aka the secont event in a run with number loop (in module sequen\
+   ce) greater than 2.  -->
+     <FrameSelection> 0 </FrameSelection>
+
+  <!-- do's and don't do's-->
+    <!-- output the traces using graphical cuts for row 10 and column10... this is a way to precheck before raytracing-->
+      <PreCheck> 0 </PreCheck>
+        <!-- the geometric correction is applied to all entries by calculating how far way that grid cell is from the detector. Mirror_radius^2/(4*distance^2)-->
+	  <GeometricCorrection> 1 </GeometricCorrection>
+	    <!-- Kasten and Young 1989 applied all grid cells for attenuation.-->
+	      <AtmosphericCorrection> 1 </AtmosphericCorrection>

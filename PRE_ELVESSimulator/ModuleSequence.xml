@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+
+<!-- Example sequence file.-->
+
+<sequenceFile>
+
+  <enableTiming/>
+
+  <moduleControl>
+    
+    <!--loop numTimes="1"-->
+      <!--module> EventGeneratorOG </module-->
+      <module> ELVESSimulator </module>
+      
+      <loop numTimes="0" pushEventToStack="yes">
+	<module> EventGeneratorOG </module>
+	<module> ELVESSimulator </module>
+	
+        <module> TelescopeSimulatorKG </module>
+	<module> FdBackgroundSimulatorOG     </module>
+	<module> FdElectronicsSimulatorOG    </module>
+
+	<module> FdTriggerSimulatorOG        </module>
+	
+	<module> EventBuilderOG              </module>
+      
+	<module> EventFileExporterOG         </module>
+      </loop>
+    <!--/loop-->
+    
+
+  </moduleControl>
+
+</sequenceFile>

@@ -1,0 +1,2 @@
+here the weights are working and but the time bins are wrong.
+The first event should be with 1000 photon bins, while the second has 720 phton tim bins for 3 frames.

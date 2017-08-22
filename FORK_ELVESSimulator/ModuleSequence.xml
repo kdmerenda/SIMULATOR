@@ -8,11 +8,9 @@
 
   <moduleControl>
     
-    <!--loop numTimes="1"-->
-      <!--module> EventGeneratorOG </module-->
       <module> ELVESSimulator </module>
       
-      <loop numTimes="1" pushEventToStack="yes">
+      <loop numTimes="3" pushEventToStack="yes">
 	<module> EventGeneratorOG </module>
 	<module> ELVESSimulator </module>
 	
@@ -26,7 +24,6 @@
       
 	<module> EventFileExporterOG         </module>
       </loop>
-    <!--/loop-->
     
 
   </moduleControl>

@@ -585,7 +585,7 @@ ELVESSimulator::ELVESSimDataCreator(){
   int previousProgress = -1;//for progress bar
   TGraph* hAtmo = new TGraph(fNumTreeEntries);
   TGraph* hGeom = new TGraph(fNumTreeEntries);
-
+  float attenuationFactor = 1000.;//
   for(int i=0; i<fNumTreeEntries;i+=fPhotonDiscr){
     fTree->GetEntry(i);    
     float thetaVarTMP, phiVarTMP, radiusVarTMP;
@@ -613,7 +613,7 @@ ELVESSimulator::ELVESSimDataCreator(){
     ESDtmp.timeEye4 = time+posTMP.GetR(eye4CS)/(kSpeedOfLight*pow(10,9));
 
     //the correction involves the einstein coefficient 2E7, the \Delta t, r, theta, phi, and the arc length is calculated at the 90 km altitude. This is to convert the number density to number of photons in individual cells. Also the output of the simulation integrates over XTimeIntegratedSteps, so a division needs to be done here. 
-    ESDtmp.nphotons = (n/SimulationParameters.TimeIntegratedSteps)*2E7*SimulationParameters.SizeStepTime *
+    ESDtmp.nphotons = ((n/attenuationFactor)/SimulationParameters.TimeIntegratedSteps)*2E7*SimulationParameters.SizeStepTime *
       SimulationParameters.SizeStepRadiusHigh * SimulationParameters.SizeStepPhi * 6460E3 * SimulationParameters.SizeStepTheta * 6460E3 ;
 
     //this is applying the geometric correction and atmoaspheric correction independently for the individual eyes, wrt to what the elves looks like in their corrd. sys. ATMO TBD!!! 
