@@ -10,7 +10,7 @@
     
       <module> ELVESSimulator </module>
       
-      <loop numTimes="3" pushEventToStack="yes">
+      <loop numTimes="unbounded" pushEventToStack="yes">
 	<module> EventGeneratorOG </module>
 	<module> ELVESSimulator </module>
 	
@@ -19,9 +19,8 @@
 	<module> FdElectronicsSimulatorOG    </module>
 
 	<module> FdTriggerSimulatorOG        </module>
-	
-	<module> EventBuilderOG              </module>
-      
+
+	<module> EventBuilderOG              </module>      
 	<module> EventFileExporterOG         </module>
       </loop>
     

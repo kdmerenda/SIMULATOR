@@ -104,11 +104,11 @@ ELVESSimulator::Init()
   topB.GetChild("ELVESParameterTreeName").GetData(fELVESParameterTreeName);
   topB.GetChild("ELVESCenterLatitude").GetData(fELVESCenterLat);
   topB.GetChild("ELVESCenterLongitude").GetData(fELVESCenterLon);
-  topB.GetChild("NumberOfDiaphragmEntryPoints").GetData(fNumDiaGridPoints);
   topB.GetChild("PhotonDiscretization").GetData(fPhotonDiscr);
   topB.GetChild("VODTot").GetData(fVODTot);
-  topB.GetChild("NumberOfTreeEntries").GetData(fNumTreeEntries);
   topB.GetChild("FrameSelection").GetData(fLoopSelect);
+  topB.GetChild("EyeSelection").GetData(fEyeSelect);
+  topB.GetChild("FrameCount").GetData(fNPages);
   topB.GetChild("PreCheck").GetData(fdoprecheck);
   topB.GetChild("RadialAnalysis").GetData(fdoradial);
   topB.GetChild("ProdVersion").GetData(fprodversion);
@@ -118,7 +118,8 @@ ELVESSimulator::Init()
 
   fIn = new TFile(fELVESInputName.data());
   fTree = (TTree*)fIn->Get(fELVESTreeName.data());
-  if (fNumTreeEntries == 0) fNumTreeEntries = fTree->GetEntries();
+  //  if (fNumTreeEntries == 0) fNumTreeEntries = fTree->GetEntries();
+  fNumTreeEntries = fTree->GetEntries();
   fSimTimeStart = fTree->GetMinimum("time");
   fSimTimeEnd = fTree->GetMaximum("time");
   
@@ -134,10 +135,10 @@ ELVESSimulator::Init()
           "                Input File: " << fELVESInputName << "\n"
           "                TTree Name: " << fELVESTreeName << "\n"
           "      Parameter TTree Name: " << fELVESParameterTreeName << "\n"
-          "Number of Diaphragm Points: " << fNumDiaGridPoints << "\n"
           "     Photon Discretization: " << fPhotonDiscr << "\n"
           "    Number of Tree Entries: " << fNumTreeEntries << "\n"
           "            Frame Selected: " << fLoopSelect << "\n"
+          "                Page Count: " << fNPages << "\n"
           "               Do PreCheck: " << fdoprecheck << "\n"
           "        Do Radial Analysis: " << fdoradial << "\n"
           "        Production Version: " << fprodversion << "\n"
@@ -160,12 +161,14 @@ VModule::ResultFlag
 ELVESSimulator::Run(evt::Event& event)
 {
   //INFO("ELVESSimulator::Run()");
-  if(fStatus == eTransformCoordinates){
 
+  //this is to satisfy the module sequence design... fLoop = 0 for the coordinate transform, fLoop = fNPages for any pages saved. 
+  if(fLoop > fNPages) return eBreakLoop;
+  
+  if(fStatus == eTransformCoordinates){
     INFO("Preparing ELVES Simulated Data Structure.");
     ELVESSimDataCreator();
-    fIn->Close();
-    
+    fIn->Close();    
   }
   
   if(fStatus == eGeneratePhotons){
@@ -218,8 +221,6 @@ ELVESSimulator::Run(evt::Event& event)
 
     const ReferenceEllipsoid ellipsoid(ReferenceEllipsoid::Get(ReferenceEllipsoid::eWGS84));
     UTMPoint elvesWantedLocationUTM(fELVESCenterLat, fELVESCenterLon, 5.0*km, ellipsoid);
-    UTMPoint elvesSimulatedLocationUTM(0.0, 0.0, 5.0*km, ellipsoid);
-    const CoordinateSystemPtr SimulatedLocationCS =  fwk::LocalCoordinateSystem::Create(elvesSimulatedLocationUTM.GetPoint());
     const CoordinateSystemPtr WantedLocationCS =  fwk::LocalCoordinateSystem::Create(elvesWantedLocationUTM.GetPoint());
     const CoordinateSystemPtr referenceCS = Detector::GetInstance().GetReferenceCoordinateSystem();
 
@@ -244,10 +245,6 @@ ELVESSimulator::Run(evt::Event& event)
       cout << event.GetHeader().GetId() << endl;
       event.GetHeader().SetId(idStr.str());
       fEvent.GetHeader().SetId(fLoop);
-      if (eyeId == 1)	  eyeCSSim = eye1CSSim;
-      if (eyeId == 2)	  eyeCSSim = eye2CSSim;
-      if (eyeId == 3)	  eyeCSSim = eye3CSSim;
-      if (eyeId == 4)	  eyeCSSim = eye4CSSim;
       
       for (fevt::Eye::TelescopeIterator iTel = eyeEvent.TelescopesBegin(fevt::ComponentSelector::eInDAQ),
 	     end = eyeEvent.TelescopesEnd(fevt::ComponentSelector::eInDAQ);
@@ -257,60 +254,32 @@ ELVESSimulator::Run(evt::Event& event)
 	
 	fevt::Telescope& telEvent = *iTel;
        	telEvent.SetTracesStartTime(fSimTime+TimeInterval((fLoop-1)*100000));
-	//	telEvent.SetTracesStartTime(TimeStamp(0));
 	const fdet::Telescope& detTel = detFD.GetTelescope(telEvent);
 	
 	const double rDia = detTel.GetDiaphragmRadius();
-	//	const double diaphragmArea = detTel.GetDiaphragmArea();
 
 	fevt::TelescopeSimData& telSim = telEvent.GetSimData();
 	telSim.SetPhotonsStartTime(fSimTime+TimeInterval((fLoop-1)*100000)); 
 
-	//	fevt::TelescopeSimData& telSim = telEvent.GetSimData();
-	//	const double binWidth = detTel.GetCamera().GetFADCBinSize();
 	const double normWavelength = detFD.GetReferenceLambda();
 	//	const double fRDiaMin = rDia/10. ;//minimum radius on diaphragm, lets say a tenth of the radius
 	const CoordinateSystemPtr& telCS = detTel.GetTelescopeCoordinateSystem();
 	double detFOV = detTel.GetCamera().GetFieldOfView()/deg;//~23 deg
 	detFOV += 10;//add 10 degrees to FOV so that more telescopes will be triggered. 
 
-	double elvesTheta  = 90.-elvesSimulatedLocationUTM.GetPoint(eyeCSSim).GetTheta(eyeCSSim)/deg;
-	double elvesPhi = elvesSimulatedLocationUTM.GetPoint(eyeCSSim).GetPhi(eyeCSSim)/deg;
-	double elvesR = elvesSimulatedLocationUTM.GetPoint(eyeCSSim).GetR(eyeCSSim)/km;	
-        double elvesThetaEyeCS  = 90.-elvesWantedLocationUTM.GetPoint(eyeCS).GetTheta(eyeCS)/deg;
-	double elvesPhiEyeCS = elvesWantedLocationUTM.GetPoint(eyeCS).GetPhi(eyeCS)/deg;
-	double elvesREyeCS = elvesWantedLocationUTM.GetPoint(eyeCS).GetR(eyeCS)/km;
-        double elvesThetaEyeCSLocal  = 90.-elvesWantedLocationUTM.GetPoint(eyeCSLocal).GetTheta(eyeCSLocal)/deg;
-	double elvesPhiEyeCSLocal = elvesWantedLocationUTM.GetPoint(eyeCSLocal).GetPhi(eyeCSLocal)/deg;
-	double elvesREyeCSLocal = elvesWantedLocationUTM.GetPoint(eyeCSLocal).GetR(eyeCSLocal)/km;
-        double elvesThetaRefCS  = 90.-elvesWantedLocationUTM.GetPoint(referenceCS).GetTheta(referenceCS)/deg;
-	double elvesPhiRefCS = elvesWantedLocationUTM.GetPoint(referenceCS).GetPhi(referenceCS)/deg;
-	double elvesRRefCS = elvesWantedLocationUTM.GetPoint(referenceCS).GetR(referenceCS)/km;
+        double elvesTheta  = 90.-elvesWantedLocationUTM.GetPoint(referenceCS).GetTheta(referenceCS)/deg;
+	double elvesPhi = elvesWantedLocationUTM.GetPoint(referenceCS).GetPhi(referenceCS)/deg;
+	double elvesR = elvesWantedLocationUTM.GetPoint(referenceCS).GetR(referenceCS)/km;
 	
 	Vector telAxis = detTel.GetAxis();
-	//initialize new axis in eyeCS and create it in eyeCSSim... dont trust the vector in our new CSSim
-	Vector telAxisSim(telAxis.GetX(eyeCSLocal),telAxis.GetY(eyeCSLocal),telAxis.GetZ(eyeCSLocal),eyeCSSim);
 	double telFOVLow =  telAxis.GetPhi(referenceCS)/deg - detFOV/2.;
 	double telFOVHigh =  telAxis.GetPhi(referenceCS)/deg + detFOV/2.;
 	
 	//if we are outside detector field of view, go to next telescope, need to add elevation check too. 
 	ostringstream info;  
 	if (elvesPhi > telFOVLow && elvesPhi < telFOVHigh) {
-	  
-	  //quick cut to only do 1 telescope
-	  //	  if (telId != 1) continue;
-
-	  info << "Eye: " <<  eyeId << " Tel: " << telId << endl;
-	  info << "Tel Axis wrt telCS (Az,El): " << telAxis.GetPhi(telCS)/deg << " "  <<   90.-telAxis.GetTheta(telCS)/deg <<  endl;
-	  info << "Tel Axis wrt refCS (Az,El): " << telAxis.GetPhi(referenceCS)/deg << " "  <<   90.-telAxis.GetTheta(referenceCS)/deg <<  endl;
-	  info << "Tel Axis wrt eyeCS (Az,El): " << telAxis.GetPhi(eyeCS)/deg << " "  <<   90.-telAxis.GetTheta(eyeCS)/deg <<  endl;
-	  info << "Tel Axis wrt eyeCSLocal (Az,El): " << telAxis.GetPhi(eyeCSLocal)/deg << " "  <<   90.-telAxis.GetTheta(eyeCSLocal)/deg <<  endl;
-	  info << "Tel Axis wrt eyeCSSim (Az,El): " << telAxis.GetPhi(eyeCSSim)/deg << " "  <<   90.-telAxis.GetTheta(eyeCSSim)/deg <<  endl;
-	  info << "Tel Axis SIM wrt eyeCSSim (Az,El): " << telAxisSim.GetPhi(eyeCSSim)/deg << " "  <<   90.-telAxisSim.GetTheta(eyeCSSim)/deg <<  endl << endl;
-	  info << "ELVES Coord wrt refCS (r, Az, El): " << elvesRRefCS << "  " << elvesPhiRefCS  << " " << elvesThetaRefCS << endl;
-	  info << "ELVES Coord wrt eyeCS (r, Az, El): " << elvesREyeCS << "  " << elvesPhiEyeCS  << " " << elvesThetaEyeCS << endl;
-	  info << "ELVES Coord wrt eyeCSLocal (r, Az, El): " << elvesREyeCSLocal << "  " << elvesPhiEyeCSLocal  << " " << elvesThetaEyeCSLocal << endl;
-	  info << "ELVES Coord wrt eyeCSSim (r, Az, El): " << elvesR << "  " << elvesPhi  << " " << elvesTheta << endl << endl;
+	  if(!(fEyeSelect==0) && !(eyeId==fEyeSelect))   continue;
+	  info << "Eye: " <<  eyeId << " Tel: " << telId << " - DETECTION!" << endl;
 	  INFO(info);
 	}else{
 	  info << "Eye: " <<  eyeId << " Tel: " << telId << " - ELVES not in field of view";
@@ -349,8 +318,15 @@ ELVESSimulator::Run(evt::Event& event)
 	  }
 	}
 
-	
+	const unsigned int nBins = 1000;
+	const double tracebin = 1e-7;
 	telSim.ClearPhotons();
+	if (!telSim.HasPhotonTrace(FdConstants::eFluorDirect))
+	  telSim.MakePhotonTrace(FdConstants::eFluorDirect,1);
+	if (!telSim.HasRayTracedPhotonTrace())
+	  telSim.MakeRayTracedPhotonTrace(nBins, tracebin);
+	telSim.ClearRayTracedPhotonTrace();
+
 	//ROOT OUTPUT TO CHECK THE SIGNAL BEFORE THE PHOTON CREATION
        	if (fdoprecheck){
 	  
@@ -398,10 +374,8 @@ ELVESSimulator::Run(evt::Event& event)
 	  //check if we are in the window of interest.
 	  if(!(ELVESData[iCell].time >= (fLoop-1)*0.0001 && ELVESData[iCell].time < (fLoop)*0.0001)) continue;
 
-	 if (ELVESData[iCell].nphotonsnormalized < 1.0) continue;//is this fair?
+	  if (ELVESData[iCell].nphotonsnormalized < 1.0) continue;//is this fair?
 
-	  for(int iPhoton=0; iPhoton<fNumDiaGridPoints; iPhoton++){
-	    
 	    const double diaPh = RandFlat::shoot(&fRandomEngine->GetEngine(), 0.0, kTwoPi);
 	    const double diaR = rDia * sqrt(RandFlat::shoot(&fRandomEngine->GetEngine(), 0.2, 1.0));
 	    const double xDia = diaR * cos(diaPh);
@@ -414,18 +388,17 @@ ELVESSimulator::Run(evt::Event& event)
 	    Vector nIn(1.,(pElves-pIn).GetTheta(telCS),(pElves-pIn).GetPhi(telCS), telCS, Vector::kSpherical);
 	    
 	    nIn.Normalize();
-	    const double weight =  ELVESData[iCell].nphotonsnormalized / fNumDiaGridPoints;
+	    const double weight =  ELVESData[iCell].nphotonsnormalized;
 	    utl::Photon photonIn(pIn, -nIn, normWavelength, weight);
 	    photonIn.SetTime(TimeInterval(photonTime));
 	    telSim.AddPhoton(photonIn);
 	    
-	  }//loop over entry poinits
-	} // loop over all simulated entries. 
+	}//loop over entry poinits
       } // End loop over Telescopes    
     } // End loop over Eyes
   }//fStatus
   
-
+  
   
   fStatus = eGeneratePhotons;  
   cout << "=============================================== " << fLoop << endl;
@@ -756,44 +729,18 @@ ELVESSimulator::ELVESSimDataCreator(){
   Point peye2eyeCS(0,0,0,eye2CSLocal);
   Point peye3eyeCS(0,0,0,eye3CSLocal);
   Point peye4eyeCS(0,0,0,eye4CSLocal);
-  // const boost::tuple<double, double, double> latLonHeight42 = ellipsoid.PointToLatitudeLongitudeHeight(peye4eyeCS);
-  // cout << "latitude, longitude, height for eye 4:" <<  boost::get<0>(latLonHeight42)/deg << " " <<  boost::get<1>(latLonHeight42)/deg << " " << boost::get<2>(latLonHeight42) << endl;
-  // const boost::tuple<double, double, double> latLonHeight32 = ellipsoid.PointToLatitudeLongitudeHeight(peye3eyeCS);
-  // cout << "latitude, longitude, height for eye 3:" <<  boost::get<0>(latLonHeight32)/deg << " " <<  boost::get<1>(latLonHeight32)/deg << " " << boost::get<2>(latLonHeight32) << endl;
-  // const boost::tuple<double, double, double> latLonHeight22 = ellipsoid.PointToLatitudeLongitudeHeight(peye2eyeCS);
-  // cout << "latitude, longitude, height for eye 2:" <<  boost::get<0>(latLonHeight22)/deg << " " <<  boost::get<1>(latLonHeight22)/deg << " " << boost::get<2>(latLonHeight22) << endl;
-  // const boost::tuple<double, double, double> latLonHeight12 = ellipsoid.PointToLatitudeLongitudeHeight(peye1eyeCS);
-  // cout << "latitude, longitude, height for eye 1:" <<  boost::get<0>(latLonHeight12)/deg << " " <<  boost::get<1>(latLonHeight12)/deg << " " << boost::get<2>(latLonHeight12) << endl;
 
   //initialize points in simulatedCS by using their location in WantedCS
   Point peye1SimulatedCS(peye1eyeCS.GetX(WantedLocationCS),peye1eyeCS.GetY(WantedLocationCS),peye1eyeCS.GetZ(WantedLocationCS),SimulatedLocationCS);
   Point peye2SimulatedCS(peye2eyeCS.GetX(WantedLocationCS),peye2eyeCS.GetY(WantedLocationCS),peye2eyeCS.GetZ(WantedLocationCS),SimulatedLocationCS);
   Point peye3SimulatedCS(peye3eyeCS.GetX(WantedLocationCS),peye3eyeCS.GetY(WantedLocationCS),peye3eyeCS.GetZ(WantedLocationCS),SimulatedLocationCS);
   Point peye4SimulatedCS(peye4eyeCS.GetX(WantedLocationCS),peye4eyeCS.GetY(WantedLocationCS),peye4eyeCS.GetZ(WantedLocationCS),SimulatedLocationCS);
-  // const boost::tuple<double, double, double> latLonHeight4 = ellipsoid.PointToLatitudeLongitudeHeight(peye4SimulatedCS);
-  // cout << "latitude, longitude, height for shifted eye 4:" <<  boost::get<0>(latLonHeight4)/deg << " " <<  boost::get<1>(latLonHeight4)/deg << " " << boost::get<2>(latLonHeight4) << endl;
-  // const boost::tuple<double, double, double> latLonHeight3 = ellipsoid.PointToLatitudeLongitudeHeight(peye3SimulatedCS);
-  // cout << "latitude, longitude, height for shifted eye 3:" <<  boost::get<0>(latLonHeight3)/deg << " " <<  boost::get<1>(latLonHeight3)/deg << " " << boost::get<2>(latLonHeight3) << endl;
-  // const boost::tuple<double, double, double> latLonHeight2 = ellipsoid.PointToLatitudeLongitudeHeight(peye2SimulatedCS);
-  // cout << "latitude, longitude, height for shifted eye 2:" <<  boost::get<0>(latLonHeight2)/deg << " " <<  boost::get<1>(latLonHeight2)/deg << " " << boost::get<2>(latLonHeight2) << endl;
-  // const boost::tuple<double, double, double> latLonHeight1 = ellipsoid.PointToLatitudeLongitudeHeight(peye1SimulatedCS);
-  // cout << "latitude, longitude, height for shifted eye 1:" <<  boost::get<0>(latLonHeight1)/deg << " " <<  boost::get<1>(latLonHeight1)/deg << " " << boost::get<2>(latLonHeight1) << endl;
 
-  //initialize CS in new location now, note the locality to Auger, and not to eye itself!!
+  //initialize CS in new location now, note the locality to Auger, and not to eye itself!! This conserved GetR value in eyeCS for time calculations. 
   eye1CSSim = fwk::LocalCoordinateSystem::Create(peye1SimulatedCS);
   eye2CSSim = fwk::LocalCoordinateSystem::Create(peye2SimulatedCS);
   eye3CSSim = fwk::LocalCoordinateSystem::Create(peye3SimulatedCS);
   eye4CSSim = fwk::LocalCoordinateSystem::Create(peye4SimulatedCS);
-  // cout << (peye1SimulatedCS-peye1eyeCS).GetMag() << " " <<(peye2SimulatedCS-peye2eyeCS).GetMag() << " " <<(peye3SimulatedCS-peye3eyeCS).GetMag() << " " <<(peye4SimulatedCS-peye4eyeCS).GetMag() << " " <<  (elvesWantedLocationUTM.GetPoint()-elvesSimulatedLocationUTM.GetPoint()).GetMag()<< endl;
-  // cout << (peye1SimulatedCS-peye3SimulatedCS).GetMag() << " " <<(peye1eyeCS-peye3eyeCS).GetMag() << endl;
-  // cout << (peye1SimulatedCS-elvesSimulatedLocationUTM.GetPoint()).GetPhi(eye1CSSim) << " " <<(peye1eyeCS-elvesWantedLocationUTM.GetPoint()).GetPhi(eye1CSLocal) << endl;
-  // cout << (peye2SimulatedCS-elvesSimulatedLocationUTM.GetPoint()).GetPhi(eye2CSSim) << " " <<(peye2eyeCS-elvesWantedLocationUTM.GetPoint()).GetPhi(eye2CSLocal) << endl;
-  // cout << (peye3SimulatedCS-elvesSimulatedLocationUTM.GetPoint()).GetPhi(eye3CSSim) << " " <<(peye3eyeCS-elvesWantedLocationUTM.GetPoint()).GetPhi(eye3CSLocal) << endl;
-  // cout << (peye4SimulatedCS-elvesSimulatedLocationUTM.GetPoint()).GetPhi(eye4CSSim) << " " <<(peye4eyeCS-elvesWantedLocationUTM.GetPoint()).GetPhi(eye4CSLocal) << endl;
-  // cout << elvesSimulatedLocationUTM.GetPoint().GetPhi(eye1CSSim) << " " <<  elvesWantedLocationUTM.GetPoint().GetPhi(eye1CSLocal) << endl;
-  // cout << elvesSimulatedLocationUTM.GetPoint().GetPhi(eye2CSSim) << " " <<  elvesWantedLocationUTM.GetPoint().GetPhi(eye2CSLocal) << endl;
-  // cout << elvesSimulatedLocationUTM.GetPoint().GetPhi(eye3CSSim) << " " <<  elvesWantedLocationUTM.GetPoint().GetPhi(eye3CSLocal) << endl;
-  // cout << elvesSimulatedLocationUTM.GetPoint().GetPhi(eye4CSSim) << " " <<  elvesWantedLocationUTM.GetPoint().GetPhi(eye4CSLocal) << endl;
 
   
   //initialize the variables for the input tree. 
@@ -816,13 +763,16 @@ ELVESSimulator::ELVESSimDataCreator(){
     fTree->SetBranchAddress("time", &time);
   }
   
-  int previousProgress = -1;//for progress bar
   TGraph* hAtmo = new TGraph(fNumTreeEntries);
   TGraph* hGeom = new TGraph(fNumTreeEntries);
   bool fdocorrplots = false;
 
+  ELVESDataONE.resize(fNumTreeEntries);
+  //first pass to do a time check and select photns within range.
+  INFO("First Pass - Read from Tree");
+  int previousProgress1 = -1;
   for(int i=0; i<fNumTreeEntries;i+=fPhotonDiscr){
-    fTree->GetEntry(i);    
+    fTree->GetEntry(i);  
     float thetaVarTMP, phiVarTMP, radiusVarTMP;
     if(fprodversion == 0){
       thetaVarTMP = position->Theta();
@@ -836,15 +786,78 @@ ELVESSimulator::ELVESSimDataCreator(){
     } 
 
     Point posTMP(ellipsoid.LatitudeLongitudeHeightToPoint((90.*deg)-thetaVarTMP, phiVarTMP, radiusVarTMP-6370*km));
-    
-    ELVESSimData ESDtmp;
+
+    ELVESSimDataONE ESDtmp;
     ESDtmp.timeEye1 = time+posTMP.GetR(eye1CSSim)/(kSpeedOfLight*1e9);
     ESDtmp.timeEye2 = time+posTMP.GetR(eye2CSSim)/(kSpeedOfLight*1e9);
     ESDtmp.timeEye3 = time+posTMP.GetR(eye3CSSim)/(kSpeedOfLight*1e9);
     ESDtmp.timeEye4 = time+posTMP.GetR(eye4CSSim)/(kSpeedOfLight*1e9);
+    ESDtmp.X = posTMP.GetX(SimulatedLocationCS);
+    ESDtmp.Y = posTMP.GetY(SimulatedLocationCS);
+    ESDtmp.Z = posTMP.GetZ(SimulatedLocationCS);
+    ESDtmp.nphotons = n;
+    ELVESDataONE[i] = ESDtmp;
+    displayProgress(i,fNumTreeEntries,previousProgress1);    
+  }
+  cout << endl;
+  
+  std::vector<ELVESSimDataONE>::iterator minTimeEye1_it =  std::min_element(ELVESDataONE.begin(), ELVESDataONE.end(), by_timeEye1ONE());
+  Double_t timeEye1MIN = (*minTimeEye1_it).timeEye1;
+  cout << "Min Time E1: " << timeEye1MIN << endl;
+  std::vector<ELVESSimDataONE>::iterator minTimeEye2_it =  std::min_element(ELVESDataONE.begin(), ELVESDataONE.end(), by_timeEye2ONE());
+  Double_t timeEye2MIN = (*minTimeEye2_it).timeEye2;
+  cout << "Min Time E2: " << timeEye2MIN << endl;
+  std::vector<ELVESSimDataONE>::iterator minTimeEye3_it =  std::min_element(ELVESDataONE.begin(), ELVESDataONE.end(), by_timeEye3ONE());
+  Double_t timeEye3MIN = (*minTimeEye3_it).timeEye3;
+  cout << "Min Time E3: " << timeEye3MIN << endl;
+  std::vector<ELVESSimDataONE>::iterator minTimeEye4_it =  std::min_element(ELVESDataONE.begin(), ELVESDataONE.end(), by_timeEye4ONE());
+  Double_t timeEye4MIN = (*minTimeEye4_it).timeEye4;
+  cout << "Min Time E4: " << timeEye4MIN << endl;
+
+  INFO("Second Pass - Calculate Arrival Time at Each Eye and Cut on Time to save RAM");
+  int previousProgress2 = -1;
+  //second pass: need  to remove the offset of each telescope to 0 the arrival time of the first photon and delete things too far away. 
+  int finalDataNEntries = fNumTreeEntries;
+  for(int i=0; i<finalDataNEntries;i++){
+    ELVESDataONE[i].timeEye1 -= timeEye1MIN;
+    ELVESDataONE[i].timeEye2 -= timeEye2MIN;
+    ELVESDataONE[i].timeEye3 -= timeEye3MIN;
+    ELVESDataONE[i].timeEye4 -= timeEye4MIN;
+    float timeTMP = TMath::Max(TMath::Max(ELVESDataONE[i].timeEye1,ELVESDataONE[i].timeEye2),TMath::Max(ELVESDataONE[i].timeEye4,ELVESDataONE[i].timeEye3));
+    
+    if(timeTMP > fNPages*1e-4){
+      std::iter_swap(ELVESDataONE.begin()+i,ELVESDataONE.end()-1);
+      ELVESDataONE.pop_back();
+      i--;
+      finalDataNEntries--;
+    }
+    
+    displayProgress(i,fNumTreeEntries,previousProgress2);
+  }
+  ELVESDataONE.shrink_to_fit();
+  fNPhotonsToCreate = ELVESDataONE.size();
+  ELVESData.resize(fNPhotonsToCreate);
+  cout << endl <<  "Number of Simulated Source Points within Selection: " << fNPhotonsToCreate << endl;
+
+  INFO("Third Pass - Apply Geometric and Atmospheric Factors");
+  //Third pass
+  int previousProgress3 = -1;//for progress bar
+  for(int i=0; i<fNPhotonsToCreate;i++){
+
+    //merge the structs, popback on old and reduce size. 
+    ELVESData[i].nphotons = ELVESDataONE[i].nphotons;
+    ELVESData[i].timeEye1 = ELVESDataONE[i].timeEye1;
+    ELVESData[i].timeEye2 = ELVESDataONE[i].timeEye2;
+    ELVESData[i].timeEye3 = ELVESDataONE[i].timeEye3;
+    ELVESData[i].timeEye4 = ELVESDataONE[i].timeEye4;
+    ELVESData[i].X = ELVESDataONE[i].X;
+    ELVESData[i].Y = ELVESDataONE[i].Y;
+    ELVESData[i].Z = ELVESDataONE[i].Z;
+    
+    Point posTMP(ELVESData[i].X,ELVESData[i].Y,ELVESData[i].Z,WantedLocationCS);
     
     //the correction involves the einstein coefficient 2E7, the \Delta t, r, theta, phi, and the arc length is calculated at the 90 km altitude. This is to convert the number density to number of photons in individual cells. Also the output of the simulation integrates over XTimeIntegratedSteps, so a division needs to be done here. 
-    ESDtmp.nphotons = (n/SimulationParameters.TimeIntegratedSteps)*2E7*SimulationParameters.SizeStepTime *
+    ELVESData[i].nphotons = (ELVESData[i].nphotons/SimulationParameters.TimeIntegratedSteps)*2E7*SimulationParameters.SizeStepTime *
       SimulationParameters.SizeStepRadiusHigh * SimulationParameters.SizeStepPhi * 6460E3 * SimulationParameters.SizeStepTheta * 6460E3 ;
     //this is applying the geometric correction and atmoaspheric correction independently for the individual eyes, wrt to what the elves looks like in their corrd. sys.
     
@@ -857,7 +870,7 @@ ELVESSimulator::ELVESSimDataCreator(){
 
       atmocorrEye2=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye2CSSim))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye2CSSim) + KYParam_b)/deg,-KYParam_c)));
       atmocorrEye3=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye3CSSim))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye3CSSim) + KYParam_b)/deg,-KYParam_c)));
-      atmocorrEye4=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye3CSSim))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye4CSSim) + KYParam_b)/deg,-KYParam_c)));
+      atmocorrEye4=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye4CSSim))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye4CSSim) + KYParam_b)/deg,-KYParam_c)));
     }else{
       atmocorrEye1=1; atmocorrEye2=1; atmocorrEye3=1;atmocorrEye4=1;
     }
@@ -872,20 +885,17 @@ ELVESSimulator::ELVESSimDataCreator(){
     }else{
       geomcorrEye1=1; geomcorrEye2=1; geomcorrEye3=1;geomcorrEye4=1;
     }
-    ESDtmp.nphotonsEye1 = ESDtmp.nphotons*atmocorrEye1*geomcorrEye1;
-    ESDtmp.nphotonsEye2 = ESDtmp.nphotons*atmocorrEye2*geomcorrEye2;
-    ESDtmp.nphotonsEye3 = ESDtmp.nphotons*atmocorrEye3*geomcorrEye3;
-    ESDtmp.nphotonsEye4 = ESDtmp.nphotons*atmocorrEye4*geomcorrEye4;
-    //    ESDtmp.positions = posTMP;//get it for each eye at time of photon creation
-    ESDtmp.X = posTMP.GetX(SimulatedLocationCS);
-    ESDtmp.Y = posTMP.GetY(SimulatedLocationCS);
-    ESDtmp.Z = posTMP.GetZ(SimulatedLocationCS);
-    ELVESData.push_back(ESDtmp);
-    displayProgress(i,fNumTreeEntries,previousProgress);
+
+    ELVESData[i].nphotonsEye1 = ELVESData[i].nphotons*atmocorrEye1*geomcorrEye1;
+    ELVESData[i].nphotonsEye2 = ELVESData[i].nphotons*atmocorrEye2*geomcorrEye2;
+    ELVESData[i].nphotonsEye3 = ELVESData[i].nphotons*atmocorrEye3*geomcorrEye3;
+    ELVESData[i].nphotonsEye4 = ELVESData[i].nphotons*atmocorrEye4*geomcorrEye4;
+    displayProgress(i,fNPhotonsToCreate,previousProgress3);
   }
+  cout << endl;
+  ELVESDataONE.clear();//remove temporary storage of tree data to save RAM. 
 
   //plot the corrections
-  cout << endl;
   if(fdoatmocorr && fdocorrplots){
     TCanvas *cAtmo = new TCanvas("cAtmo","cAtmo",800,600);
     hAtmo->SetTitle("Atmospheric Attenuation for Individual Grid Cells");
@@ -905,38 +915,15 @@ ELVESSimulator::ELVESSimDataCreator(){
     cGeom->SaveAs("outputs/GeomCorr.png");    
   }
 
-  fNPhotonsToCreate = ELVESData.size();
-  cout << endl <<  "Number of Simulated Source Points: " << fNPhotonsToCreate << endl;
-  
-  //sorting the struct to get the ranges in time for each eye and the num density
-  
+    
   std::vector<ELVESSimData>::iterator maxPhotonEye1_it =  std::max_element(ELVESData.begin(), ELVESData.end(), by_nphotonsEye1());
   std::cout << "nMax Photons E1: " << (*maxPhotonEye1_it).nphotons<< endl;
-  std::vector<ELVESSimData>::iterator minTimeEye1_it =  std::min_element(ELVESData.begin(), ELVESData.end(), by_timeEye1());
-  Double_t timeEye1MIN = (*minTimeEye1_it).timeEye1;
-  cout << "Min Time E1: " << timeEye1MIN << endl;
-  std::vector<ELVESSimData>::iterator minTimeEye2_it =  std::min_element(ELVESData.begin(), ELVESData.end(), by_timeEye2());
-  Double_t timeEye2MIN = (*minTimeEye2_it).timeEye2;
-  cout << "Min Time E2: " << timeEye2MIN << endl;
-  std::vector<ELVESSimData>::iterator minTimeEye3_it =  std::min_element(ELVESData.begin(), ELVESData.end(), by_timeEye3());
-  Double_t timeEye3MIN = (*minTimeEye3_it).timeEye3;
-  cout << "Min Time E3: " << timeEye3MIN << endl;
-  std::vector<ELVESSimData>::iterator minTimeEye4_it =  std::min_element(ELVESData.begin(), ELVESData.end(), by_timeEye4());
-  Double_t timeEye4MIN = (*minTimeEye4_it).timeEye4;
-  cout << "Min Time E4: " << timeEye4MIN << endl;
 
-  //need  to remove the offset of each telescope to 0 the arrival time of the first photon. 
-  for(int i=0; i<fNPhotonsToCreate;i++){
-    ELVESData[i].timeEye1 -= timeEye1MIN;
-    ELVESData[i].timeEye2 -= timeEye2MIN;
-    ELVESData[i].timeEye3 -= timeEye3MIN;
-    ELVESData[i].timeEye4 -= timeEye4MIN;
-  }
   
   /*
     Alright, now the data should be in a format that can be used easily to create the photons in the telescope simulator. A struct was created to contain each of the grid cells simulated with the number density changing through time wrt to each eyes. The next step is to loop through the telescopes and start adding events. ... checks of the data have been done and where presented in Malargue March 2017.  
      */
-
+  
   if(fdoradial){
     INFO("Radial Analysis in Progress.");
     RadialAnalysis(WantedLocationCS,eye1CS,timeEye1MIN);
