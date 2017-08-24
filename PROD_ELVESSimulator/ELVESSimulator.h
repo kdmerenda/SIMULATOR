@@ -48,18 +48,30 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
   };
 
   struct ELVESSimData { 
-    double timeEye1;
-    double timeEye2;
-    double timeEye3;
-    double timeEye4;
-    double time;
-    double nphotons;
-    double nphotonsEye1;
-    double nphotonsEye2;
-    double nphotonsEye3;
-    double nphotonsEye4;
-    double nphotonsnormalized;
-    utl::Point positions;
+    float timeEye1;
+    float timeEye2;
+    float timeEye3;
+    float timeEye4;
+    float time;
+    float nphotons;
+    float nphotonsEye1;
+    float nphotonsEye2;
+    float nphotonsEye3;
+    float nphotonsEye4;
+    float nphotonsnormalized;
+    float X;//in elves local cs
+    float Y;
+    float Z;
+  };
+  struct ELVESSimDataONE { 
+    float timeEye1;
+    float timeEye2;
+    float timeEye3;
+    float timeEye4;
+    float X;//in elves local cs
+    float Y;
+    float Z;
+    float nphotons;
   };
         
       struct by_timeEye1 { 
@@ -82,6 +94,26 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
 	  return a.timeEye4 < b.timeEye4;
 	}
       };
+      struct by_timeEye1ONE { 
+	bool operator()(ELVESSimDataONE const &a, ELVESSimDataONE const &b) { 
+	  return a.timeEye1 < b.timeEye1;
+	}
+      };
+      struct by_timeEye2ONE { 
+	bool operator()(ELVESSimDataONE const &a, ELVESSimDataONE const &b) { 
+	  return a.timeEye2 < b.timeEye2;
+	}
+      };
+      struct by_timeEye3ONE { 
+	bool operator()(ELVESSimDataONE const &a, ELVESSimDataONE const &b) { 
+	  return a.timeEye3 < b.timeEye3;
+	}
+      };
+      struct by_timeEye4ONE { 
+	bool operator()(ELVESSimDataONE const &a, ELVESSimDataONE const &b) { 
+	  return a.timeEye4 < b.timeEye4;
+	}
+      };
 
       struct by_time { 
 	bool operator()(ELVESSimData const &a, ELVESSimData const &b) { 
@@ -89,31 +121,12 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
 	}
       };
       
-      struct by_nphotons { 
-	bool operator()(ELVESSimData const &a, ELVESSimData const &b) { 
+      struct by_nphotonsONE { 
+	bool operator()(ELVESSimDataONE const &a, ELVESSimDataONE const &b) { 
 	  return a.nphotons < b.nphotons;
 	}
       };
-      struct by_nphotonsEye1 { 
-	bool operator()(ELVESSimData const &a, ELVESSimData const &b) { 
-	  return a.nphotonsEye1 < b.nphotonsEye1;
-	}
-      };
-      struct by_nphotonsEye2 { 
-	bool operator()(ELVESSimData const &a, ELVESSimData const &b) { 
-	  return a.nphotonsEye2 < b.nphotonsEye2;
-	}
-      };
-      struct by_nphotonsEye3 { 
-	bool operator()(ELVESSimData const &a, ELVESSimData const &b) { 
-	  return a.nphotonsEye3 < b.nphotonsEye3;
-	}
-      };
-      struct by_nphotonsEye4 { 
-	bool operator()(ELVESSimData const &a, ELVESSimData const &b) { 
-	  return a.nphotonsEye4 < b.nphotonsEye4;
-	}
-      };
+
       struct TimeCutIndices{
 	int eye1;
 	int eye2;
@@ -141,9 +154,6 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
   VModule::ResultFlag Run(evt::Event& e);
   VModule::ResultFlag ELVESSimDataCreator();
   VModule::ResultFlag Finish();
-  VModule::ResultFlag makePixels(int, int);
-  VModule::ResultFlag MakeTraces(TString ,int,double,double , const fdet::Telescope&, int, int);
-  TTree* makeTelDataTree(int, utl::Vector, int, utl::CoordinateSystemPtr);
   
  private:
   
@@ -151,11 +161,13 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
   double fELVESCenterLon;
   int fNumDiaGridPoints;
   int fPhotonDiscr;
+  double fVODTot;
   int fNumTreeEntries;
   std::string fELVESInputName;
   std::string fELVESTreeName;
   std::string fELVESParameterTreeName;
   TTree* fTree;
+  TTree* fTreeSim;
   TTree* fParameterTree;
   TFile* fIn;
   utl::ShadowPtr<utl::Point> fPosition;
@@ -171,9 +183,15 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
   int fMaster = 0;
   OutputTreeVariables SimulationParameters;
   TTree* fSimDataTree;
+  double fSimTimeStart;
+  double fSimTimeEnd;
+  int fEyeSelect;
+  int fTelSelect;
+  int fNPages;
   int fdogeomcorr;
   int fdoatmocorr;
   int fdoprecheck;
+  int fdoradial;
   int fprodversion;
   double fNPhotonsMIN;
   double fNPhotonsMAX;
@@ -189,14 +207,21 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
   void displayProgress(Int_t, Int_t, Int_t &);
   
   std::vector<ELVESSimData> ELVESData;
+  std::vector<ELVESSimDataONE> ELVESDataONE;
   std::vector<TimeCutIndices> PhotonLoops100us;
 
+  utl::CoordinateSystemPtr eye1CSSim;
+  utl::CoordinateSystemPtr eye2CSSim; 
+  utl::CoordinateSystemPtr eye3CSSim; 
+  utl::CoordinateSystemPtr eye4CSSim; 
+  utl::CoordinateSystemPtr eyeCSSim; 
+
+  
   int fLoop;
   int fLoopSelect;
   bool fInit;
   Status fStatus;
 
-  std::vector<TCutG*> pixelCuts;
 
   REGISTER_MODULE("ELVESSimulator",ELVESSimulator);
   

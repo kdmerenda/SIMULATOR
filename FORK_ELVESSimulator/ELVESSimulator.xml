@@ -34,7 +34,7 @@
   <!-- do's and don't do's-->
   <!-- output the traces using graphical cuts for row 10 and column10... this is a way to precheck before raytracing-->
   <PreCheck> 0 </PreCheck>
-  <RadialAnalysis> 0 </RadialAnalysis>
+  <RadialAnalysis> 1 </RadialAnalysis>
   <!-- the geometric correction is applied to all entries by calculating how far way that grid cell is from the detector. Mirror_radius^2/(4*distance^2)-->
   <GeometricCorrection> 1 </GeometricCorrection>
   <!-- Kasten and Young 1989 applied all grid cells for attenuation.-->

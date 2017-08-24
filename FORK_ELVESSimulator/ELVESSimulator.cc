@@ -369,6 +369,7 @@ ELVESSimulator::Run(evt::Event& event)
 
 	//This is the creation of photons
 	INFO("Creating Photons.");
+	int photonCounter = 0;
 	for(int iCell=0; iCell<fNPhotonsToCreate;iCell+=fPhotonDiscr){
 	  
 	  //check if we are in the window of interest.
@@ -386,14 +387,14 @@ ELVESSimulator::Run(evt::Event& event)
 	    
 	    Point pElves(ELVESData[iCell].X,ELVESData[iCell].Y,ELVESData[iCell].Z,WantedLocationCS);
 	    Vector nIn(1.,(pElves-pIn).GetTheta(telCS),(pElves-pIn).GetPhi(telCS), telCS, Vector::kSpherical);
-	    
 	    nIn.Normalize();
-	    const double weight =  ELVESData[iCell].nphotonsnormalized;
+	    const float weight =  ELVESData[iCell].nphotonsnormalized;
 	    utl::Photon photonIn(pIn, -nIn, normWavelength, weight);
 	    photonIn.SetTime(TimeInterval(photonTime));
 	    telSim.AddPhoton(photonIn);
-	    
+	    photonCounter++;
 	}//loop over entry poinits
+	cout << "Initialized " << photonCounter << " photons to retrace. " << endl;
       } // End loop over Telescopes    
     } // End loop over Eyes
   }//fStatus
@@ -488,7 +489,7 @@ ELVESSimulator::MakeTraces(TString rctag,int rcnum,double maxtime,double timebin
   return eSuccess;
 }
 VModule::ResultFlag 
-ELVESSimulator::RadialAnalysis(CoordinateSystemPtr LocalCS, CoordinateSystemPtr Eye1CS,Double_t Eye1TimeMIN) 
+ELVESSimulator::RadialAnalysis(CoordinateSystemPtr LocalCS, CoordinateSystemPtr EyeCS) 
 {  
   gStyle->SetOptStat(0);
 
@@ -500,9 +501,9 @@ ELVESSimulator::RadialAnalysis(CoordinateSystemPtr LocalCS, CoordinateSystemPtr 
   float adistance2; vector<float> pixelDistanceToIonoTip;
   while (myfile2 >> adistance2) { pixelDistanceToIonoTip.push_back(adistance2);  }
 
-  //getting pixel intercept with ionosphere for eye1, tel3
-  int eyeId = 3;
-  int telId = 6;
+  //getting pixel intercept with ionosphere for eye4, tel4
+  int eyeId = 4;
+  int telId = 4;
   int  pixelColumnSelect = 6;
   const fdet::Eye& eye = Detector::GetInstance().GetFDetector().GetEye(eyeId);
   const fdet::Telescope& tel = eye.GetTelescope(telId);
@@ -536,7 +537,7 @@ ELVESSimulator::RadialAnalysis(CoordinateSystemPtr LocalCS, CoordinateSystemPtr 
     
       pixelIonoPointsEDGE.push_back(pixelIonoPointEDGE);
       gpixelGrid->SetPoint(pixelId-1,pixelIonoPoint.GetRho(LocalCS),0.9e11);
-      cout <<pixel.GetColumn() <<" " <<  pixel.GetRow() << " " <<  pixelIonoPoint.GetRho(LocalCS) << " " << pixelIonoPointEDGE.GetRho(LocalCS) << " " <<  pixelIonoPoint.GetPhi(LocalCS) << endl;
+      //      cout <<pixel.GetColumn() <<" " <<  pixel.GetRow() << " " <<  pixelIonoPoint.GetRho(LocalCS) << " " << pixelIonoPointEDGE.GetRho(LocalCS) << " " <<  pixelIonoPoint.GetPhi(LocalCS) << endl;
       TLine* linetmp = new TLine(0.1+0.8*pixelIonoPointEDGE.GetRho(LocalCS)/300000.,0.8,0.1+0.8*pixelIonoPointEDGE.GetRho(LocalCS)/300000.,0.85);
       linetmp->SetNDC();
       linetmp->SetLineWidth(2.0);
@@ -554,7 +555,7 @@ ELVESSimulator::RadialAnalysis(CoordinateSystemPtr LocalCS, CoordinateSystemPtr 
       
       pixelIonoPointsEDGE.push_back(pixelIonoPointEDGE);
       gpixelGrid->SetPoint(pixelId-1,pixelIonoPoint.GetRho(LocalCS),0.9e11);
-      cout <<pixel.GetColumn() <<" " <<  pixel.GetRow() << " " <<  pixelIonoPoint.GetRho(LocalCS) << " " << pixelIonoPointEDGE.GetRho(LocalCS) << " " <<  pixelIonoPoint.GetPhi(LocalCS) <<endl;
+      // cout <<pixel.GetColumn() <<" " <<  pixel.GetRow() << " " <<  pixelIonoPoint.GetRho(LocalCS) << " " << pixelIonoPointEDGE.GetRho(LocalCS) << " " <<  pixelIonoPoint.GetPhi(LocalCS) <<endl;
       TLine* linetmp = new TLine(0.1+0.8*pixelIonoPointEDGE.GetRho(LocalCS)/300000.,0.75,0.1+0.8*pixelIonoPointEDGE.GetRho(LocalCS)/300000.,0.8);
       linetmp->SetNDC();
       linetmp->SetLineWidth(2.0);
@@ -587,17 +588,17 @@ ELVESSimulator::RadialAnalysis(CoordinateSystemPtr LocalCS, CoordinateSystemPtr 
     hIntensityVec[iPlot] = new TH1D(titletmp,"Altitude Integrated Intensity;Distance from ELVES Center (m);  Number of Photons / 3 km Bins",100,0,300000);    
     hIntensitySDVec[iPlot] = new TH1D(titletmp2,"Surface Photon Density; Distance from ELVES Center (m);  Surface Photon Density",100,0,300000);
   }
-  for(int iCell=0; iCell<fNPhotonsToCreate;iCell+=fPhotonDiscr){
-    Point pElves(ELVESData[iCell].X,ELVESData[iCell].Y,ELVESData[iCell].Z,LocalCS);
+  for(int iCell=0; iCell<fNumTreeEntries;iCell++){
+    Point pElves(ELVESDataONE[iCell].X,ELVESDataONE[iCell].Y,ELVESDataONE[iCell].Z,LocalCS);
     tAzimuth =  pElves.GetPhi(LocalCS); 
     tPolar = pElves.GetTheta(LocalCS);
 
     //recover the original time... 
-    tTime = ELVESData[iCell].timeEye1 + Eye1TimeMIN - pElves.GetR(Eye1CS)/(kSpeedOfLight*pow(10,9));
+    tTime = ELVESDataONE[iCell].timeEye4 - pElves.GetR(EyeCS)/(kSpeedOfLight*pow(10,9));
  
     //calculate the distance from the center of the ring
     tDistance = pElves.GetR(LocalCS)*TMath::Sin(tPolar);
-    tNPhotons = ELVESData[iCell].nphotons;//post corrections
+    tNPhotons = ELVESDataONE[iCell].nphotons;//post corrections
 
     for(int iPlot=0; iPlot<numPlots;iPlot++){
       if(tTime-fSimTimeStart < (iPlot*numSkip+1)*timeWidth && tTime-fSimTimeStart > (iPlot*numSkip)*timeWidth){
@@ -795,12 +796,23 @@ ELVESSimulator::ELVESSimDataCreator(){
     ESDtmp.X = posTMP.GetX(SimulatedLocationCS);
     ESDtmp.Y = posTMP.GetY(SimulatedLocationCS);
     ESDtmp.Z = posTMP.GetZ(SimulatedLocationCS);
-    ESDtmp.nphotons = n;
+    //the correction involves the einstein coefficient 2E7, the \Delta t, r, theta, phi, and the arc length is calculated at the 90 km altitude. This is to convert the number density to number of photons in individual cells. Also the output of the simulation integrates over XTimeIntegratedSteps, so a division needs to be done here. 
+    ESDtmp.nphotons = (n/SimulationParameters.TimeIntegratedSteps)*2E7*SimulationParameters.SizeStepTime *
+      SimulationParameters.SizeStepRadiusHigh * SimulationParameters.SizeStepPhi * 6460E3 * SimulationParameters.SizeStepTheta * 6460E3 ;
+
     ELVESDataONE[i] = ESDtmp;
     displayProgress(i,fNumTreeEntries,previousProgress1);    
   }
   cout << endl;
+
+  if(fdoradial){
+    INFO("Radial Analysis in Progress.");
+    RadialAnalysis(WantedLocationCS,eye4CS);
+  }
   
+  std::vector<ELVESSimDataONE>::iterator maxn_it =  std::max_element(ELVESDataONE.begin(), ELVESDataONE.end(), by_nphotonsONE());
+  Double_t nMAX = (*maxn_it).nphotons;
+  cout << "MAX n: " << nMAX << endl;
   std::vector<ELVESSimDataONE>::iterator minTimeEye1_it =  std::min_element(ELVESDataONE.begin(), ELVESDataONE.end(), by_timeEye1ONE());
   Double_t timeEye1MIN = (*minTimeEye1_it).timeEye1;
   cout << "Min Time E1: " << timeEye1MIN << endl;
@@ -824,28 +836,29 @@ ELVESSimulator::ELVESSimDataCreator(){
     ELVESDataONE[i].timeEye3 -= timeEye3MIN;
     ELVESDataONE[i].timeEye4 -= timeEye4MIN;
     float timeTMP = TMath::Max(TMath::Max(ELVESDataONE[i].timeEye1,ELVESDataONE[i].timeEye2),TMath::Max(ELVESDataONE[i].timeEye4,ELVESDataONE[i].timeEye3));
-    
-    if(timeTMP > fNPages*1e-4){
+    //only if within window of interest plus a 1 page margin...
+    if(timeTMP >= fNPages*1e-4+1e-4){
       std::iter_swap(ELVESDataONE.begin()+i,ELVESDataONE.end()-1);
       ELVESDataONE.pop_back();
       i--;
       finalDataNEntries--;
     }
-    
-    displayProgress(i,fNumTreeEntries,previousProgress2);
+    displayProgress(i,finalDataNEntries,previousProgress2);
   }
   ELVESDataONE.shrink_to_fit();
   fNPhotonsToCreate = ELVESDataONE.size();
   ELVESData.resize(fNPhotonsToCreate);
   cout << endl <<  "Number of Simulated Source Points within Selection: " << fNPhotonsToCreate << endl;
+  
 
   INFO("Third Pass - Apply Geometric and Atmospheric Factors");
   //Third pass
   int previousProgress3 = -1;//for progress bar
+  float attenuationFactor = 10.;
   for(int i=0; i<fNPhotonsToCreate;i++){
 
     //merge the structs, popback on old and reduce size. 
-    ELVESData[i].nphotons = ELVESDataONE[i].nphotons;
+    ELVESData[i].nphotons = ELVESDataONE[i].nphotons/attenuationFactor;
     ELVESData[i].timeEye1 = ELVESDataONE[i].timeEye1;
     ELVESData[i].timeEye2 = ELVESDataONE[i].timeEye2;
     ELVESData[i].timeEye3 = ELVESDataONE[i].timeEye3;
@@ -856,32 +869,27 @@ ELVESSimulator::ELVESSimDataCreator(){
     
     Point posTMP(ELVESData[i].X,ELVESData[i].Y,ELVESData[i].Z,WantedLocationCS);
     
-    //the correction involves the einstein coefficient 2E7, the \Delta t, r, theta, phi, and the arc length is calculated at the 90 km altitude. This is to convert the number density to number of photons in individual cells. Also the output of the simulation integrates over XTimeIntegratedSteps, so a division needs to be done here. 
-    ELVESData[i].nphotons = (ELVESData[i].nphotons/SimulationParameters.TimeIntegratedSteps)*2E7*SimulationParameters.SizeStepTime *
-      SimulationParameters.SizeStepRadiusHigh * SimulationParameters.SizeStepPhi * 6460E3 * SimulationParameters.SizeStepTheta * 6460E3 ;
     //this is applying the geometric correction and atmoaspheric correction independently for the individual eyes, wrt to what the elves looks like in their corrd. sys.
-    
     double atmocorrEye1, atmocorrEye2, atmocorrEye3, atmocorrEye4;
     double KYParam_a = 0.50572, KYParam_b = 6.07995*deg, KYParam_c = 1.6364; //Kasten and Young 1989.. careful all defined in degrees, while points are in rad
     double VODTot = fVODTot;
     if(fdoatmocorr){    
-      atmocorrEye1=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye1CSSim))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye1CSSim) + KYParam_b)/deg,-KYParam_c)));
-      if(fdocorrplots)hAtmo->SetPoint(i,90.-posTMP.GetTheta(eye1CSSim)/deg, atmocorrEye1);
-
-      atmocorrEye2=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye2CSSim))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye2CSSim) + KYParam_b)/deg,-KYParam_c)));
-      atmocorrEye3=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye3CSSim))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye3CSSim) + KYParam_b)/deg,-KYParam_c)));
-      atmocorrEye4=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye4CSSim))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye4CSSim) + KYParam_b)/deg,-KYParam_c)));
+      atmocorrEye1=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye1CS))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye1CS) + KYParam_b)/deg,-KYParam_c)));
+      if(fdocorrplots)hAtmo->SetPoint(i,90.-posTMP.GetTheta(eye1CS)/deg, atmocorrEye1);
+      atmocorrEye2=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye2CS))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye2CS) + KYParam_b)/deg,-KYParam_c)));
+      atmocorrEye3=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye3CS))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye3CS) + KYParam_b)/deg,-KYParam_c)));
+      atmocorrEye4=TMath::Exp(-(VODTot)/(TMath::Sin((TMath::Pi()/2.)-posTMP.GetTheta(eye4CS))+KYParam_a*pow(((TMath::Pi()/2.)-posTMP.GetTheta(eye4CS) + KYParam_b)/deg,-KYParam_c)));
     }else{
       atmocorrEye1=1; atmocorrEye2=1; atmocorrEye3=1;atmocorrEye4=1;
     }
 
     double geomcorrEye1, geomcorrEye2, geomcorrEye3,geomcorrEye4;
     if(fdogeomcorr){
-      geomcorrEye1 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye1CSSim)*posTMP.GetR(eye1CSSim)));
-      if(fdocorrplots)hGeom->SetPoint(i,posTMP.GetR(eye1CSSim), geomcorrEye1);
-      geomcorrEye2 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye2CSSim)*posTMP.GetR(eye2CSSim)));
-      geomcorrEye3 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye3CSSim)*posTMP.GetR(eye3CSSim)));
-      geomcorrEye4 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye4CSSim)*posTMP.GetR(eye4CSSim)));      
+      geomcorrEye1 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye1CS)*posTMP.GetR(eye1CS)));
+      if(fdocorrplots)hGeom->SetPoint(i,posTMP.GetR(eye1CS), geomcorrEye1);
+      geomcorrEye2 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye2CS)*posTMP.GetR(eye2CS)));
+      geomcorrEye3 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye3CS)*posTMP.GetR(eye3CS)));
+      geomcorrEye4 = ((1.8*1.8*kPi)/(4*kPi*posTMP.GetR(eye4CS)*posTMP.GetR(eye4CS)));      
     }else{
       geomcorrEye1=1; geomcorrEye2=1; geomcorrEye3=1;geomcorrEye4=1;
     }
@@ -916,18 +924,11 @@ ELVESSimulator::ELVESSimDataCreator(){
   }
 
     
-  std::vector<ELVESSimData>::iterator maxPhotonEye1_it =  std::max_element(ELVESData.begin(), ELVESData.end(), by_nphotonsEye1());
-  std::cout << "nMax Photons E1: " << (*maxPhotonEye1_it).nphotons<< endl;
 
   
   /*
     Alright, now the data should be in a format that can be used easily to create the photons in the telescope simulator. A struct was created to contain each of the grid cells simulated with the number density changing through time wrt to each eyes. The next step is to loop through the telescopes and start adding events. ... checks of the data have been done and where presented in Malargue March 2017.  
      */
-  
-  if(fdoradial){
-    INFO("Radial Analysis in Progress.");
-    RadialAnalysis(WantedLocationCS,eye1CS,timeEye1MIN);
-  }
   
   fInit=true;
   return eSuccess;

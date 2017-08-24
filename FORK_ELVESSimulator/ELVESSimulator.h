@@ -121,9 +121,9 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
 	}
       };
       
-      struct by_nphotonsEye1 { 
-	bool operator()(ELVESSimData const &a, ELVESSimData const &b) { 
-	  return a.nphotonsEye1 < b.nphotonsEye1;
+      struct by_nphotonsONE { 
+	bool operator()(ELVESSimDataONE const &a, ELVESSimDataONE const &b) { 
+	  return a.nphotons < b.nphotons;
 	}
       };
 
@@ -157,7 +157,7 @@ class ELVESSimulator : public boost::noncopyable, public fwk::VModule {
   Double_t myCB(Double_t *, Double_t *);
   VModule::ResultFlag makePixels(int, int);
   VModule::ResultFlag MakeTraces(TString ,int,double,double , const fdet::Telescope&, int, int);
-  VModule::ResultFlag RadialAnalysis(utl::CoordinateSystemPtr, utl::CoordinateSystemPtr, Double_t); 
+  VModule::ResultFlag RadialAnalysis(utl::CoordinateSystemPtr, utl::CoordinateSystemPtr); 
   TTree* makeTelDataTree(int, utl::Vector, int, utl::CoordinateSystemPtr);
   
  private:

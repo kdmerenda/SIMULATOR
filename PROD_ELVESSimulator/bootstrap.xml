@@ -29,16 +29,15 @@
       type       = "XML"
       xlink:href = "./ELVESSimulator.xml"/>
 
+    <configLink
+      id         = "TelescopeSimulatorKG"
+      type       = "XML"
+      xlink:href = "./TelescopeSimulatorKG.xml"/>
 
    <configLink                                                                                                    
       id         = "EventFileExporter"                        
       type       = "XML"                                                                                          
       xlink:href = "./EventFileExporter.xml"/>  
-
-   <configLink                                                                                                    
-      id         = "TelescopeSimulator"                        
-      type       = "XML"                                                                                          
-      xlink:href = "./TelescopeSimulatorKG.xml"/>  
   </centralConfig>
 
 </bootstrap>

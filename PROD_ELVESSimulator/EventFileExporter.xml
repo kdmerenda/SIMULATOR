@@ -15,7 +15,8 @@
 
 <!-- the list of filenames (space delimited) -->
 
-<OutputFilename> /media/kswiss/ExtraDrive1/ELVESNet/raw/ZZZZZ.root </OutputFilename>
+<!--OutputFilename> outputs/FdSimOut.tauf400us_250kA_7km_0.7c.-65.0.root </OutputFilename-->
+<OutputFilename> outputs/FdSimOut.test.-65.0.root </OutputFilename>
 
 <!-- Switches to turn on or off streaming to root file for selected parts of the event -->
 <StreamerSwitches>

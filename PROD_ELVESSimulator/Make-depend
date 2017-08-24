@@ -1307,6 +1307,10 @@ ELVESSimulator.o: ELVESSimulator.cc ELVESSimulator.h \
  /home/kswiss/Workspace/offline/ape/External/root/5.34.00-14d831f5b4/include/root/TLatex.h \
  /home/kswiss/Workspace/offline/ape/External/root/5.34.00-14d831f5b4/include/root/TText.h \
  /home/kswiss/Workspace/offline/ape/External/root/5.34.00-14d831f5b4/include/root/TH1D.h \
+ /home/kswiss/Workspace/offline/ape/External/root/5.34.00-14d831f5b4/include/root/TF1.h \
+ /home/kswiss/Workspace/offline/ape/External/root/5.34.00-14d831f5b4/include/root/TFormula.h \
+ /home/kswiss/Workspace/offline/ape/External/root/5.34.00-14d831f5b4/include/root/TBits.h \
+ /home/kswiss/Workspace/offline/ape/External/root/5.34.00-14d831f5b4/include/root/Math/ParamFunctor.h \
  /home/kswiss/Workspace/offline/ape/External/root/5.34.00-14d831f5b4/include/root/TMath.h \
  /home/kswiss/Workspace/offline/ape/External/root/5.34.00-14d831f5b4/include/root/TError.h \
  /home/kswiss/Workspace/offline/ape/External/root/5.34.00-14d831f5b4/include/root/TVector3.h \
